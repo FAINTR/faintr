@@ -1,0 +1,60 @@
+# Weekly encrypted backup of the FAINTR database (accounts, Rosters, saved teams, bug reports).
+# Supabase's free plan has no backups, so this keeps the last 5 weeks as private GitHub artifacts.
+# Needs two repository secrets: SUPABASE_DB_URL (Session pooler connection string) and BACKUP_PASSPHRASE.
+# Restore: see docs/WEBSITE_SETUP.md, "Backups".
+name: FAINTR database backup
+
+on:
+  schedule:
+    - cron: "17 9 * * 0" # Sundays, about 4 a.m. Central
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check secrets
+        id: gate
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$DB" ] || [ -z "$PASS" ]; then echo "Backup secrets aren't set yet; skipping."; echo "skip=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install the Postgres 17 client
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-17
+
+      - name: Dump and encrypt
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          stamp=$(date -u +%Y-%m-%d)
+          # Data only (the tables themselves come from 001_init.sql). Note: --schema would be ignored next to --table.
+          /usr/lib/postgresql/17/bin/pg_dump "$DB" --format=custom --data-only --no-owner --no-privileges \
+            --table='public.*' --table=auth.users --table=auth.identities --file="faintr-$stamp.dump"
+          # Refuse to keep a backup that's missing the trainers' data
+          list=$(/usr/lib/postgresql/17/bin/pg_restore --list "faintr-$stamp.dump")
+          for t in profiles user_storage bug_reports users; do echo "$list" | grep -q "TABLE DATA [a-z]* $t " || { echo "Backup is missing $t"; exit 1; }; done
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$PASS" --symmetric --cipher-algo AES256 \
+            --output "faintr-$stamp.dump.gpg" "faintr-$stamp.dump"
+          rm "faintr-$stamp.dump"
+          ls -la faintr-*.gpg
+          echo "STAMP=$stamp" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          name: faintr-db-${{ env.STAMP }}
+          path: faintr-*.dump.gpg
+          retention-days: 35

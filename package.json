@@ -1,0 +1,57 @@
+{
+  "name": "faintr",
+  "version": "1.4.0",
+  "description": "FAINTR: Win the matchup. PvP team tools for Pokémon GO, built on PvPoke's battle simulator",
+  "main": "server.js",
+  "bin": "server.js",
+  "license": "MIT",
+  "scripts": {
+    "start": "node server.js",
+    "build-data": "node build.js assets/pvpoke-src assets/data/all-1500 150 all-1500",
+    "exe": "pkg . --compress GZip"
+  },
+  "pkg": {
+    "scripts": [
+      "build_worker.js",
+      "update_worker.js",
+      "engine_worker.js",
+      "build.js",
+      "engine.js",
+      "scoring.js",
+      "teamdata.js",
+      "metrics.js",
+      "memberlib.js",
+      "pvpoke_grades.js",
+      "pool.js",
+      "store.js",
+      "updater.js",
+      "report.js",
+      "formats.js",
+      "antimeta_worker.js",
+      "threevthree.js",
+      "engine_glue.js",
+      "teamcodec.js",
+      "appcore.js"
+    ],
+    "assets": [
+      "assets/**/*",
+      "ui/**/*",
+      "metrics.js",
+      "CHANGELOG.md",
+      "schedule.json"
+    ],
+    "targets": [
+      "node22-win-x64",
+      "node22-linux-x64"
+    ],
+    "outputPath": "dist"
+  },
+  "dependencies": {
+    "@fontsource/inter": "^5.0.0"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.117.2",
+    "@yao-pkg/pkg": "^6.23.0",
+    "esbuild": "^0.24.0"
+  }
+}

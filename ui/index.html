@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FAINTR — Win the matchup.</title>
+<meta name="description" content="FAINTR: free PvP team tools for Pokémon GO. Team finder, team grader, matchup simulator and Roster for every league and cup.">
+<link rel="icon" type="image/svg+xml" href="/static/brand/faintr-icon.svg">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/config.js"></script>
+<script src="/metrics.js"></script>
+<!--WEB-HEAD-->
+</head>
+<body>
+<header class="top">
+  <div class="topbar">
+    <a class="brand" href="/" aria-label="FAINTR home">
+      <!-- Mark, dark-background variant (guide 6): charcoal half switched to Steel -->
+      <svg viewBox="60 40 140 180" aria-hidden="true">
+        <path d="M130 50 L70 68 V122 C70 165 100 192 130 208 Z" transform="translate(-2 4)" fill="#D7263D"/>
+        <path d="M130 50 L190 68 V122 C190 165 160 192 130 208 Z" transform="translate(2 0)" fill="#8A93A3"/>
+        <circle cx="130" cy="120" r="27" fill="#F2F4F7"/>
+        <line x1="103" y1="120" x2="157" y2="120" stroke="#2B2F3A" stroke-width="6"/>
+        <circle cx="130" cy="120" r="9" fill="#F5B800" stroke="#2B2F3A" stroke-width="5"/>
+      </svg>
+      <div><div class="wordmark"><span class="f">FAINT</span><span class="r">R</span></div><div class="tag">Win the matchup.</div></div>
+    </a>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button role="tab" aria-selected="true" data-view="find">Teams</button>
+      <button role="tab" aria-selected="false" data-view="grade">Team Grader</button>
+      <button role="tab" aria-selected="false" data-view="battle">Matchups</button>
+      <button role="tab" aria-selected="false" data-view="roster">Roster</button>
+      <button role="tab" aria-selected="false" data-view="ivs">PvP IVs</button>
+      <button role="tab" aria-selected="false" data-view="meta">Meta</button>
+      <button role="tab" aria-selected="false" data-view="saved">My Teams</button>
+      <button role="tab" aria-selected="false" data-view="news">What's New</button>
+      <button role="tab" aria-selected="false" data-view="bugs">Report a Bug</button>
+    </nav>
+    <div class="topright">
+      <a class="social discord" id="discordBtn" href="#" target="_blank" rel="noopener"><i aria-hidden="true"></i>Discord</a>
+      <a class="social patreon" id="patreonBtn" href="#" target="_blank" rel="noopener"><i aria-hidden="true"></i>Patreon</a>
+      <button type="button" id="accountBtn" hidden>Sign in</button>
+    </div>
+  </div>
+  <div class="fmtbar">
+    <div class="fmtin">
+      <span class="fmtlabel" id="fmtLabel">League</span>
+      <span class="seg dark" id="leagueSeg" role="group" aria-label="League"></span>
+      <select id="cupSel" aria-label="This season's cups"></select>
+      <button type="button" id="antiBtn" class="antibtn" aria-pressed="false" title="Rank teams by how they do against the strongest meta teams">Anti-Meta</button>
+      <span class="fmtnote" id="fmtNote"></span>
+      <span class="fmttools"><span id="datainfo"><span class="dot"></span>Loading data</span>
+        <button type="button" id="themeBtn">Dark mode</button>
+        <button type="button" id="dataBtn">Data and updates</button></span>
+    </div>
+  </div>
+</header>
+<div class="banner" id="updBanner" hidden></div>
+
+<main>
+  <!-- FAINTR Teams -->
+  <section class="view on" id="view-find">
+    <div class="viewhead"><h1 id="findTitle">FAINTR Teams</h1><p id="findLede">Every team from PvPoke's top 150, graded and ranked. Tell us what matters and what you own, and we'll sort the rest.</p></div>
+    <div class="find">
+      <aside class="filters panel" aria-label="Filters">
+        <h3>Your Roster</h3>
+        <label class="check"><input type="checkbox" id="ownedOnly"> Only Pokémon in my Roster</label>
+        <p class="note" id="ownedNote"></p>
+        <h3>Must include</h3>
+        <div class="picker" id="pk-include"><input type="text" placeholder="Search Pokémon" aria-label="Pokémon the team must include"><div class="suggest" hidden></div></div>
+        <div class="chips" id="chips-include"></div>
+        <h3>Leave out</h3>
+        <div class="picker" id="pk-exclude"><input type="text" placeholder="Search Pokémon" aria-label="Pokémon to leave out"><div class="suggest" hidden></div></div>
+        <div class="chips" id="chips-exclude"></div>
+        <h3>Minimum grades</h3>
+        <div id="mins"></div>
+        <div class="row2"><span>Shadow Pokémon</span><select id="maxShadow"><option value="">Any</option><option value="0">None</option><option value="1">At most 1</option><option value="2">At most 2</option></select></div>
+        <h3>What matters most</h3>
+        <p class="hint">Weights for the overall score. 0 ignores a grade.</p>
+        <div id="weights"></div>
+        <button class="btn quiet" style="width:100%;justify-content:center;margin-top:12px" type="button" id="resetBtn">Reset filters and weights</button>
+      </aside>
+      <div>
+        <div class="resultbar">
+          <strong id="matched">Searching</strong>
+          <span class="tierlegend" id="tierLegend"></span>
+        </div>
+        <div class="teams" id="teams"></div>
+        <button class="btn quiet more" id="moreBtn" type="button" hidden>Show 50 more</button>
+      </div>
+    </div>
+    <details class="howto panel">
+      <summary>How the grades work</summary>
+      <p class="note">Every battle runs on PvPoke's own simulator, on your computer. The four PvPoke grades are computed exactly the way PvPoke's Team Builder does it with default settings, so a team entered on pvpoke.com in the order shown here gets the same letters. The six FAINTR team checks are our own, scored against every team in the same league or cup: the best 10% earn an A, the next 20% a B, the next 30% a C, the next 25% a D, and the bottom 15% an F. Meta Wins plays each team in simulated 3v3s against the 60 strongest varied teams in the league, so the overall score rewards teams that actually win, not just teams with nice numbers. The overall score is colored by where it ranks among all teams: top 0.1%, 1%, 5% and 25%.</p>
+      <p class="note"><b>Anti-Meta</b> (the button next to the leagues) ranks every team purely by how often it beats those 60 teams. The top 200 are re-played as 3v3 chains on PvPoke's own battle engine, with HP, energy and shields carried between fights.</p>
+      <div class="gradekey" id="gradeKey"></div>
+      <dl id="howlist"></dl>
+    </details>
+  </section>
+
+  <!-- Team Grader -->
+  <section class="view" id="view-grade">
+    <div class="viewhead"><h1>Team Grader</h1><p id="gradeLede">Pick three Pokémon, their moves and your IVs, or load them from your Roster. We battle each one against every Pokémon in the league at 0, 1 and 2 shields, then show you what the team does well, what beats it, and how to play it.</p></div>
+    <div class="slots" id="slots"></div>
+    <div class="gradebar">
+      <button class="btn primary" id="gradeBtn" type="button">Grade team</button>
+      <button class="btn" id="fillBtn" type="button">Find the rest</button>
+      <button class="btn" id="saveBtn" type="button" disabled>Save to My Teams</button>
+      <button class="btn quiet" id="clearBtn" type="button">Clear</button>
+      <span class="note" id="gradeStatus"></span>
+    </div>
+    <div id="gradeResult"><div class="empty">No team yet. Pick a lead and we'll find the rest.</div></div>
+  </section>
+
+  <!-- FAINTR Matchups -->
+  <section class="view" id="view-battle">
+    <div class="viewhead"><h1>FAINTR Matchups</h1><p>Any 1v1 on PvPoke's battle engine with exact IVs, shields and bait behavior, or find the best answers to the Pokémon that keep beating you.</p></div>
+    <div class="modeseg"><span class="seg" id="battleMode" role="group" aria-label="Mode"><button type="button" data-m="1v1" aria-pressed="true">1v1 battle</button><button type="button" data-m="counters" aria-pressed="false">Counter finder</button></span></div>
+    <div id="mode-1v1">
+      <div class="bsides" id="bsides"></div>
+      <div class="gradebar">
+        <button class="btn primary" id="battleBtn" type="button">Battle</button>
+        <button class="btn" id="swapSidesBtn" type="button">Swap sides</button>
+        <button class="btn" id="vsMetaBtn" type="button">Your Pokémon against the top 100</button>
+        <span class="note" id="battleStatus"></span>
+      </div>
+      <div id="battleResult"></div>
+    </div>
+    <div id="mode-counters" hidden>
+      <div class="panel cfpanel">
+        <div>
+          <h3>Opponents</h3>
+          <p class="hint">Up to three. Pick the lead or core that keeps beating you.</p>
+          <div class="picker" id="pk-opp"><input type="text" placeholder="Search Pokémon" aria-label="Opponents to counter"><div class="suggest" hidden></div></div>
+          <div class="chips" id="chips-opp"></div>
+        </div>
+        <div>
+          <h3>Answers from</h3>
+          <span class="seg" id="cfSource" role="group" aria-label="Where answers come from"><button type="button" data-s="pool" aria-pressed="true">Top meta</button><button type="button" data-s="roster" aria-pressed="false">My Roster</button></span>
+          <p class="hint" style="margin-top:8px" id="cfHint">Ranked by wins at 1 shield, then average battle rating.</p>
+          <button class="btn primary" type="button" id="cfBtn">Find counters</button> <span class="note" id="cfStatus"></span>
+        </div>
+      </div>
+      <div id="cfResult"></div>
+    </div>
+  </section>
+
+  <!-- Roster -->
+  <section class="view" id="view-roster">
+    <div class="viewhead"><h1>Roster</h1><p>Your PvP-ready Pokémon with their real moves and IVs, <span id="rWhere">saved on this computer</span>. FAINTR uses your Roster to filter Teams, fill the Team Grader and find counters you actually own.</p></div>
+    <div class="panel rgate" id="rGate" hidden>
+      <h3>Sign in to build your Roster</h3>
+      <p class="note">Your Roster is saved to your own account, so it's private to you and follows you to any device. Everything else on FAINTR works without an account, and the Team Grader can still pick any Pokémon.</p>
+      <div class="actions"><button class="btn primary" type="button" id="rGateIn">Sign in</button><button class="btn" type="button" id="rGateUp">Create a free account</button></div>
+    </div>
+    <div class="rtools">
+      <button class="btn primary" type="button" id="rAdd">Add Pokémon</button>
+      <button class="btn" type="button" id="rQuick">Quick add</button>
+      <input type="search" id="rSearch" placeholder="Filter by name or type" aria-label="Filter Roster">
+      <label class="note">League <span class="seg" id="rLeague" role="group" aria-label="League for IV rank"></span></label>
+      <label class="note">Sort <select id="rSort">
+        <option value="rank">Best IV rank first</option><option value="cpdesc">CP, high to low</option><option value="cpasc">CP, low to high</option>
+        <option value="name">Name</option><option value="dex">Pokédex number</option><option value="new">Newest</option></select></label>
+      <label class="note">Show <select id="rFilter">
+        <option value="all">All</option><option value="ready">Ready for this league</option><option value="powerup">Needs powering up</option><option value="top">Top 100 IVs here</option>
+        <option value="pinned">Pinned</option><option value="shiny">Shiny</option><option value="dupes">Duplicates</option></select></label>
+      <span class="seg" id="rView" role="group" aria-label="View"><button type="button" data-v="cards" aria-pressed="true">Cards</button><button type="button" data-v="list" aria-pressed="false">List</button></span>
+      <span class="spacer"></span>
+      <button class="btn quiet small" type="button" id="rCopy">Copy search string</button>
+      <a class="btn quiet small" href="/api/roster/export" id="rExport">Export</a>
+      <label class="btn quiet small" for="rImportFile" title="A FAINTR Roster file, or a CSV export from Poke Genie or Calcy IV">Import<input type="file" id="rImportFile" accept="application/json,.json,text/csv,.csv" hidden></label>
+    </div>
+    <p class="note" id="rNote"></p>
+    <div class="rgrid" id="rGrid"></div>
+  </section>
+
+  <!-- PvP IVs -->
+  <section class="view" id="view-ivs">
+    <div class="viewhead"><h1>PvP IVs</h1><p>How good are these IVs? Rank any Pokémon's IVs in Little, Great, Ultra and Master League, across its whole evolution family, with every IV combination ranked and a search string to find the best ones in your storage.</p></div>
+    <div class="ivtop">
+      <div class="panel ivin">
+        <label class="field">Pokémon</label>
+        <div class="picker" id="pk-iv"><input type="text" placeholder="Search every Pokémon" aria-label="Pokémon"><div class="suggest" hidden></div></div>
+        <div class="picked note" id="ivPicked">None picked yet.</div>
+        <div class="ivrow" style="margin-top:10px">
+          <label>Attack<input type="number" min="0" max="15" id="ivAtk" value="0"></label>
+          <label>Defense<input type="number" min="0" max="15" id="ivDef" value="15"></label>
+          <label>HP<input type="number" min="0" max="15" id="ivHp" value="15"></label>
+          <label>Max level<select id="ivCap"><option value="50">50</option><option value="51">51 (best buddy)</option><option value="40">40</option><option value="41">41 (best buddy)</option></select></label>
+        </div>
+        <div class="presets"><button class="btn small quiet" type="button" id="ivR1">Rank 1 IVs</button><button class="btn small quiet" type="button" id="ivHundo">15/15/15</button></div>
+        <label class="field">League</label>
+        <span class="seg" id="ivLeague" role="group" aria-label="League"></span>
+        <label class="field" for="ivFloor">Lowest possible IV (how it was obtained)</label>
+        <select id="ivFloor"><option value="0">Wild catch (0)</option><option value="1">Good Friend trade (1)</option><option value="2">Great Friend trade (2)</option><option value="3">Ultra Friend trade (3)</option>
+          <option value="4">Weather boosted (4)</option><option value="5">Best Friend trade (5)</option><option value="10">Raid, research or egg (10)</option><option value="12">Lucky trade (12)</option></select>
+        <div class="actions"><button class="btn primary" type="button" id="ivAddRoster" disabled>Add to Roster</button><button class="btn" type="button" id="ivBattle" disabled>Battle it</button></div>
+      </div>
+      <div class="panel ivout" id="ivOut"><div class="empty" style="border:0">Pick a Pokémon and enter its IVs. Everything updates as you type.</div></div>
+    </div>
+    <div class="panel ivfam" id="ivFam" hidden></div>
+    <div class="panel ivtable" id="ivTableBox" hidden>
+      <div class="ivtablehead"><h3 style="margin:0">Every IV combination</h3>
+        <label class="note">Min Atk <input type="number" min="0" max="15" value="0" id="ivMinA" style="width:56px"></label>
+        <label class="note">Min Def <input type="number" min="0" max="15" value="0" id="ivMinD" style="width:56px"></label>
+        <label class="note">Min HP <input type="number" min="0" max="15" value="0" id="ivMinH" style="width:56px"></label>
+        <label class="note">Sort <select id="ivSort" style="width:auto"><option value="rank">Rank</option><option value="atk">Attack stat</option><option value="def">Defense stat</option><option value="hp">HP stat</option><option value="cp">CP</option></select></label>
+        <button class="btn small quiet" type="button" id="ivJump">Jump to my IVs</button>
+        <span class="spacer"></span><span class="note" id="ivTableNote"></span></div>
+      <div class="scroll" id="ivTableScroll" style="max-height:520px"><table class="t" id="ivTable"></table></div>
+      <button class="btn quiet more" type="button" id="ivMore" hidden>Show more</button>
+    </div>
+  </section>
+
+  <!-- Meta -->
+  <section class="view" id="view-meta">
+    <div class="viewhead"><h1>Meta rankings</h1><p id="metaLede">PvPoke's current rankings with every role score.</p></div>
+    <div id="metaChanges"></div>
+    <div class="metatools">
+      <input type="search" id="metaSearch" placeholder="Filter by name or type" aria-label="Filter rankings">
+      <label class="note">Sort by <select id="metaSort">
+        <option value="rank">Overall</option><option value="lead">Lead</option><option value="switch">Switch</option><option value="closer">Closer</option>
+        <option value="attacker">Attacker</option><option value="charger">Charger</option><option value="consistency">Consistency</option><option value="delta">Biggest movers</option></select></label>
+      <label class="check"><input type="checkbox" id="metaOwned"> In my Roster</label>
+      <span class="note" id="metaNote"></span>
+    </div>
+    <div class="panel scroll" style="max-height:none"><table class="t" id="metaTable"></table></div>
+  </section>
+
+  <!-- My Teams -->
+  <section class="view" id="view-saved">
+    <div class="viewhead"><h1>My Teams</h1><p>Saved teams get re-graded every time the data updates, so you'll see when a move rebalance or a meta shift helps or hurts them.</p></div>
+    <div class="saved" id="savedList"></div>
+  </section>
+
+  <!-- Report a Bug -->
+  <section class="view" id="view-bugs">
+    <div class="viewhead"><h1>Report a Bug</h1><p>Something wrong, confusing or missing? Tell us here. What you were doing, the league or cup, and your browser are attached automatically.</p></div>
+    <div class="bugwrap">
+      <form class="panel bugform" id="bugForm" autocomplete="on">
+        <label class="field" for="bugCat">What kind of report?</label>
+        <select id="bugCat"><option value="bug">Something's broken</option><option value="data">Wrong data or grade</option><option value="idea">Idea or request</option><option value="other">Something else</option></select>
+        <label class="field" for="bugTitle">Short title</label>
+        <input type="text" id="bugTitle" maxlength="120" placeholder="e.g. Team Grader won't load Shadow Quagsire" required>
+        <label class="field" for="bugDetails">What happened?</label>
+        <textarea id="bugDetails" rows="5" maxlength="5000" placeholder="What you expected, and what you saw instead" required></textarea>
+        <label class="field" for="bugSteps">Steps to make it happen again (optional)</label>
+        <textarea id="bugSteps" rows="3" maxlength="3000" placeholder="1. Open Team Grader&#10;2. Pick ...&#10;3. ..."></textarea>
+        <div id="bugEmailRow"><label class="field" for="bugEmail">Email, if you'd like a reply (optional)</label><input type="email" id="bugEmail" maxlength="200" placeholder="you@example.com"></div>
+        <div class="actions"><button class="btn primary" type="submit" id="bugSend">Send report</button><span class="note" id="bugStatus"></span></div>
+      </form>
+      <aside class="panel bugside">
+        <h3>Faster help</h3>
+        <p class="note">For quick questions, the Discord is usually fastest.</p>
+        <a class="social discord" id="discordBtn2" href="#" target="_blank" rel="noopener"><i aria-hidden="true"></i>Join the Discord</a>
+        <div id="bugAdmin" hidden><h3 style="margin-top:18px">Reports (admin)</h3><div id="bugList" class="note">Loading</div></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- What's New -->
+  <section class="view" id="view-news"><div class="panel md" id="changelog"></div></section>
+</main>
+
+<footer class="legal">
+  <p>FAINTR is not affiliated with, endorsed by, or sponsored by Niantic, Nintendo, Game Freak, or The Pokémon Company. Pokémon and Pokémon GO are trademarks of their respective owners.</p>
+  <p>Battle simulation, game data and rankings come from <a href="https://github.com/pvpoke/pvpoke" target="_blank" rel="noopener">PvPoke</a>, used under the MIT License. FAINTR is free, and the core tools stay free.</p>
+</footer>
+
+<dialog id="dataDlg">
+  <h2>Data and updates</h2>
+  <p class="note" id="dataNow"></p>
+  <section id="webData" hidden>
+    <p class="note">FAINTR's website updates itself every night at midnight Central time: it checks PvPoke for new rankings and moves, re-runs every matchup that changed and publishes the results. You don't need to do anything.</p>
+  </section>
+  <section id="devTools" hidden>
+    <h3 style="margin:0 0 6px">Dev tools</h3>
+    <p class="note">Run the nightly update now. "Check now" rebuilds only what changed at PvPoke; "Rebuild everything" re-runs every league and cup (about an hour).</p>
+    <div class="actions"><button class="btn primary" type="button" id="devRun">Update data now</button><button class="btn" type="button" id="devForce">Rebuild everything</button><button class="btn quiet" type="button" id="devRefresh">Refresh status</button></div>
+    <div id="devRuns" class="note" style="margin-top:10px"></div>
+  </section>
+  <section class="desk">
+    <label class="check"><input type="checkbox" id="autoUpd"> Check for new PvPoke data when FAINTR opens, and every few hours while it's open</label>
+  </section>
+  <section class="desk">
+    <label class="check"><input type="checkbox" id="schedUpd"> Update every day, even when FAINTR is closed</label>
+    <div style="margin-top:8px" class="note">Time <input type="time" id="schedTime" value="06:00"> <span id="schedNote"></span></div>
+  </section>
+  <section class="desk">
+    <p class="note" id="updMsg">Downloads PvPoke's latest game data and rankings from GitHub, including new cups. If anything changed, FAINTR re-runs every matchup and re-scores every team on this computer. Your current data stays in place until it finishes.</p>
+    <progress id="updProg" value="0" max="1" hidden></progress>
+    <div class="actions"><button class="btn primary" id="updNow" type="button">Check for updates</button><button class="btn" id="dlgClose" type="button">Close</button></div>
+  </section>
+</dialog>
+
+<dialog id="rDlg" class="wide">
+  <form method="dialog" id="rForm">
+    <div class="rdlghead"><span class="crest lg" id="rfCrest"></span><div><h2 id="rfTitle">Add to Roster</h2><p class="note" id="rfSub">Search for a Pokémon, then enter what you see on its screen in Pokémon GO.</p></div></div>
+    <div class="rform">
+      <div>
+        <label class="field">Pokémon</label>
+        <div class="picker" id="pk-roster"><input type="text" placeholder="Search every Pokémon" aria-label="Pokémon"><div class="suggest" hidden></div></div>
+        <div class="picked note" id="rfPicked">None picked yet.</div>
+        <label class="field" for="rfNick">Nickname (optional)</label><input type="text" id="rfNick" maxlength="24" style="width:100%">
+        <div class="ivrow" style="margin-top:10px">
+          <label>Attack<input type="number" min="0" max="15" id="rfAtk" value="0"></label>
+          <label>Defense<input type="number" min="0" max="15" id="rfDef" value="15"></label>
+          <label>HP<input type="number" min="0" max="15" id="rfHp" value="15"></label>
+          <label>CP<input type="number" min="10" max="9999" id="rfCp" placeholder="1500"></label>
+        </div>
+        <div class="rchecks"><label class="check"><input type="checkbox" id="rfShiny"> Shiny</label><label class="check"><input type="checkbox" id="rfBuddy"> Best buddy (level 51)</label><label class="check"><input type="checkbox" id="rfPin"> Pin to top</label></div>
+        <label class="field">Caught in</label>
+        <div class="ballpick" id="rfBall" role="radiogroup" aria-label="Ball it was caught in"></div>
+      </div>
+      <div>
+        <label class="field" for="rfFast">Fast move</label><select id="rfFast" disabled></select>
+        <label class="field" for="rfC1">Charged move 1</label><select id="rfC1" disabled></select>
+        <label class="field" for="rfC2">Charged move 2</label><select id="rfC2" disabled></select>
+        <p class="hint" style="margin-top:6px">Leave the moves on PvPoke's pick if you haven't TMed it yet.</p>
+        <label class="field" for="rfNotes">Notes (optional)</label><input type="text" id="rfNotes" maxlength="80" style="width:100%" placeholder="e.g. needs Elite TM, trade bait, for Fantasy Cup">
+        <div class="rfpreview" id="rfPreview"></div>
+      </div>
+    </div>
+    <div class="actions"><button class="btn primary" type="button" id="rfSave">Save to Roster</button><button class="btn" type="button" id="rfCancel">Cancel</button><span class="note" id="rfStatus"></span></div>
+  </form>
+</dialog>
+
+<dialog id="qDlg" class="wide">
+  <h2>Quick add</h2>
+  <p class="note">One Pokémon per line: its name, IVs (Attack/Defense/HP) and CP. Add "shiny" or "shadow" if it is. Moves start on PvPoke's pick; edit any card later to set them.</p>
+  <textarea id="qText" rows="7" style="width:100%" placeholder="Azumarill 0/15/15 1498&#10;Shadow Gligar 1/14/15 1495 shiny&#10;Registeel 0/14/12 1497"></textarea>
+  <div id="qPreview" class="note" style="margin-top:8px"></div>
+  <div class="actions"><button class="btn" type="button" id="qCheck">Check</button><button class="btn primary" type="button" id="qAdd" disabled>Add to Roster</button><button class="btn quiet" type="button" id="qClose">Close</button></div>
+</dialog>
+
+<dialog id="authDlg" class="authdlg">
+  <div id="authOut">
+    <h2 id="authTitle">Sign in to FAINTR</h2>
+    <p class="note">Your Roster and saved teams follow you to any device. Everything else works without an account.</p>
+    <span class="seg" id="authMode" role="group" aria-label="Sign in or create an account"><button type="button" data-m="in" aria-pressed="true">Sign in</button><button type="button" data-m="up" aria-pressed="false">Create account</button></span>
+    <form id="authForm" autocomplete="on">
+      <div id="authNameRow" hidden><label class="field" for="authName">Trainer name</label><input type="text" id="authName" maxlength="40" autocomplete="nickname"></div>
+      <label class="field" for="authEmail">Email</label><input type="email" id="authEmail" required autocomplete="email">
+      <label class="field" for="authPass">Password</label><input type="password" id="authPass" minlength="8" required autocomplete="current-password">
+      <div class="actions"><button class="btn primary" type="submit" id="authGo">Sign in</button><button class="btn quiet small" type="button" id="authMagic">Email me a sign-in link</button><button class="btn quiet small" type="button" id="authForgot">Forgot password?</button></div>
+    </form>
+    <div class="authalt" id="authAlt" hidden><button class="btn discordbtn" type="button" id="authDiscord" hidden>Continue with Discord</button><button class="btn googlebtn" type="button" id="authGoogle" hidden>Continue with Google</button></div>
+    <p class="note" id="authStatus"></p>
+  </div>
+  <div id="authIn" hidden>
+    <h2>Your account</h2>
+    <p class="note" id="authWho"></p>
+    <label class="field" for="authNewName">Trainer name</label>
+    <div class="actions" style="margin-top:0"><input type="text" id="authNewName" maxlength="40"><button class="btn small" type="button" id="authSaveName">Save</button></div>
+    <div id="authMove" hidden class="note" style="margin-top:12px"></div>
+    <div id="authNewPass" hidden><label class="field" for="authPass2">New password</label><div class="actions" style="margin-top:0"><input type="password" id="authPass2" minlength="8" autocomplete="new-password"><button class="btn small" type="button" id="authSetPass">Set password</button></div></div>
+    <div class="actions"><button class="btn" type="button" id="authSignOut">Sign out</button></div>
+    <details class="authdanger"><summary>Delete my account</summary>
+      <p class="note">This permanently deletes your account, your Roster and your saved teams. Download your Roster first from the Roster tab if you want a copy.</p>
+      <div class="actions"><button class="btn small" type="button" id="authDelete">Delete my account</button><span class="confirm" id="authDeleteConfirm" hidden>Sure? This can't be undone. <button class="btn small primary" type="button" id="authDeleteYes">Yes, delete it</button></span></div>
+    </details>
+    <p class="note" id="authStatus2"></p>
+  </div>
+  <div class="actions" style="justify-content:flex-end"><button class="btn quiet" type="button" id="authClose">Close</button></div>
+</dialog>
+
+<div class="loader" id="loader" hidden><div class="panel"><b id="loaderTitle">Loading FAINTR</b><progress id="loaderProg" max="1" value="0"></progress><span class="note" id="loaderNote">Starting the battle engine</span></div></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<!--WEB-SCRIPTS-->
+<script src="/static/app.js"></script>
+</body>
+</html>

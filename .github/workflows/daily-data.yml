@@ -1,0 +1,124 @@
+# Rebuilds FAINTR's data from the latest PvPoke and publishes the website to Cloudflare Pages.
+# Runs every night at midnight Central, when you push code to main, and when an admin presses
+# "Update data now" on the website (that calls this through the Supabase function trigger-update).
+name: FAINTR site update
+
+on:
+  schedule:
+    - cron: "0 5 * * *" # midnight Central in daylight time (CDT, March to November)
+    - cron: "0 6 * * *" # midnight Central in standard time (CST, November to March)
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Rebuild every format even if PvPoke didn't change
+        type: choice
+        options: ["false", "true"]
+        default: "false"
+      formats:
+        description: Only these formats, comma separated (e.g. all-1500,fantasy-1500). Empty means all.
+        required: false
+        default: ""
+      requested_by:
+        description: Who asked (filled in by the website)
+        required: false
+        default: ""
+
+concurrency:
+  group: faintr-site
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      # GitHub's schedule is in UTC, so two times are listed; only the one that is midnight in Chicago today runs.
+      - name: Check it's midnight Central
+        id: gate
+        env:
+          REQ_BY: ${{ inputs.requested_by }}
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            off=$(TZ=America/Chicago date +%z)
+            if { [ "${{ github.event.schedule }}" = "0 5 * * *" ] && [ "$off" != "-0500" ]; } || \
+               { [ "${{ github.event.schedule }}" = "0 6 * * *" ] && [ "$off" != "-0600" ]; }; then
+              echo "Not midnight in Chicago for this schedule; skipping."; echo "skip=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+          if [ -n "$REQ_BY" ]; then printf 'Requested from the website by %s\n' "$REQ_BY"; fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.skip != 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        if: steps.gate.outputs.skip != 'true'
+        run: npm ci --no-audit --no-fund
+
+      # Last run's PvPoke copy and team data, so only formats that changed are rebuilt
+      - name: Restore built data
+        if: steps.gate.outputs.skip != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: .webcache
+          key: faintr-webcache-${{ github.run_id }}
+          restore-keys: faintr-webcache-
+
+      - name: Build the site
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          FAINTR_DISCORD_URL: ${{ vars.FAINTR_DISCORD_URL }}
+          FAINTR_PATREON_URL: ${{ vars.FAINTR_PATREON_URL }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          FAINTR_LOGIN_PROVIDERS: ${{ vars.FAINTR_LOGIN_PROVIDERS }}
+          GITHUB_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
+          FORMATS: ${{ inputs.formats }}
+        run: |
+          # Inputs arrive as environment variables and are checked, never pasted into the script
+          if ! [[ "$FORMATS" =~ ^[a-z0-9,-]*$ ]]; then echo "formats may only hold format keys like all-1500,fantasy-1500"; exit 1; fi
+          args=(--fetch)
+          if [ "$FORCE" = "true" ]; then args+=(--force); fi
+          if [ -n "$FORMATS" ]; then args+=(--formats "$FORMATS"); fi
+          node tools/build_web.js "${args[@]}"
+
+      - name: Save built data
+        if: steps.gate.outputs.skip != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .webcache
+          key: faintr-webcache-${{ github.run_id }}
+
+      # First run only: makes the Cloudflare Pages project (later runs just see it exists)
+      - name: Make the Cloudflare Pages project
+        if: steps.gate.outputs.skip != 'true'
+        continue-on-error: true
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages project create ${{ vars.CF_PAGES_PROJECT || 'faintr' }} --production-branch=main
+
+      - name: Publish to Cloudflare Pages
+        if: steps.gate.outputs.skip != 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy site --project-name=${{ vars.CF_PAGES_PROJECT || 'faintr' }} --branch=main --commit-dirty=true
+
+      # A free Supabase project pauses after a week with no activity; this keeps it awake
+      - name: Keep Supabase awake
+        if: steps.gate.outputs.skip != 'true' && vars.SUPABASE_URL != ''
+        run: curl -fsS "${{ vars.SUPABASE_URL }}/rest/v1/site_status?select=id" -H "apikey: ${{ vars.SUPABASE_ANON_KEY }}" > /dev/null || echo "Supabase didn't answer (it may be paused; open the Supabase dashboard to restore it)."

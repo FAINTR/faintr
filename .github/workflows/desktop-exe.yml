@@ -1,0 +1,43 @@
+# Builds the Windows desktop app (FAINTR.exe) in the cloud. Run it from Actions > "FAINTR desktop app" > Run workflow,
+# then download the .exe from the run's Artifacts. It gets the same Discord/Patreon links as the website, and sends
+# bug reports to the same Supabase table.
+name: FAINTR desktop app
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Put the site links into the app
+        env:
+          FAINTR_DISCORD_URL: ${{ vars.FAINTR_DISCORD_URL }}
+          FAINTR_PATREON_URL: ${{ vars.FAINTR_PATREON_URL }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        run: |
+          node -e "
+          const fs=require('fs'); let s=fs.readFileSync('ui/config.js','utf8');
+          const set=(k,v)=>{ if(v) s=s.replace(new RegExp(k+\": ''\"), k+': '+JSON.stringify(v)); };
+          set('discordUrl', process.env.FAINTR_DISCORD_URL); set('patreonUrl', process.env.FAINTR_PATREON_URL);
+          set('supabaseUrl', (process.env.SUPABASE_URL||'').replace(/\\/$/,'')); set('supabaseAnonKey', process.env.SUPABASE_ANON_KEY);
+          fs.writeFileSync('ui/config.js', s);"
+          grep -n "Url:\|Key:" ui/config.js
+      - name: Build FAINTR.exe
+        run: npx pkg . --compress GZip --targets node22-win-x64 --output dist/FAINTR.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FAINTR-windows-${{ github.sha }}
+          path: dist/FAINTR.exe
+          retention-days: 30

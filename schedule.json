@@ -1,0 +1,19 @@
+{
+  "season": "Twilight Trails",
+  "source": "Pokémon GO Battle League season schedule (via Pokémon GO Hub), September 8 to December 1, 2026. Periods start and end at 1:00 p.m. Pacific.",
+  "note": "Edit this file each season. Each period lists what's live in GO Battle League; keys are FAINTR format keys (cup-cp). A key PvPoke doesn't rank yet is skipped.",
+  "periods": [
+    { "start": "2026-09-08T20:00:00Z", "end": "2026-09-15T20:00:00Z", "formats": [["mega-1500", "Great (Mega)"], ["mega-2500", "Ultra (Mega)"], ["mega-10000", "Master (Mega)"]] },
+    { "start": "2026-09-15T20:00:00Z", "end": "2026-09-22T20:00:00Z", "formats": [["all-1500", "Great"], ["mega-2500", "Ultra (Mega)"], ["willpower-1500", "Willpower Cup"]] },
+    { "start": "2026-09-22T20:00:00Z", "end": "2026-09-29T20:00:00Z", "formats": [["retro-1500", "Retro Cup"], ["all-2500", "Ultra"], ["mega-10000", "Master (Mega)"]] },
+    { "start": "2026-09-29T20:00:00Z", "end": "2026-10-06T20:00:00Z", "formats": [["megacolor-1500", "Mega Color Cup"], ["all-10000", "Master"]] },
+    { "start": "2026-10-06T20:00:00Z", "end": "2026-10-13T20:00:00Z", "formats": [["mega-1500", "Great (Mega)"], ["mega-2500", "Ultra (Mega)"], ["mega-10000", "Master (Mega)"]] },
+    { "start": "2026-10-13T20:00:00Z", "end": "2026-10-20T20:00:00Z", "formats": [["all-1500", "Great"], ["mega-2500", "Ultra (Mega)"], ["little-500", "Little Cup"]] },
+    { "start": "2026-10-20T20:00:00Z", "end": "2026-10-27T20:00:00Z", "formats": [["fantasy-1500", "Fantasy Cup"], ["all-2500", "Ultra"], ["mega-10000", "Master (Mega)"]] },
+    { "start": "2026-10-27T20:00:00Z", "end": "2026-11-03T21:00:00Z", "formats": [["halloween-1500", "Mega Halloween Cup"], ["all-10000", "Master"]] },
+    { "start": "2026-11-03T21:00:00Z", "end": "2026-11-10T21:00:00Z", "formats": [["mega-1500", "Great (Mega)"], ["mega-2500", "Ultra (Mega)"], ["mega-10000", "Master (Mega)"]] },
+    { "start": "2026-11-10T21:00:00Z", "end": "2026-11-17T21:00:00Z", "formats": [["all-1500", "Great"], ["mega-2500", "Ultra (Mega)"], ["laic2026-1500", "GO LAIC Cup"]] },
+    { "start": "2026-11-17T21:00:00Z", "end": "2026-11-24T21:00:00Z", "formats": [["laic2026-1500", "GO LAIC Cup"], ["all-2500", "Ultra"], ["mega-10000", "Master (Mega)"]] },
+    { "start": "2026-11-24T21:00:00Z", "end": "2026-12-01T21:00:00Z", "formats": [["catch-1500", "Mega Catch Cup"], ["all-10000", "Master"]] }
+  ]
+}

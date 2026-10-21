@@ -1,0 +1,3 @@
+# Only the settings FAINTR needs; everything else uses Supabase's defaults.
+[functions.trigger-update]
+verify_jwt = true
