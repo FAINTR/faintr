@@ -93,37 +93,19 @@ Deno.test('webhook accepts signed payloads and rejects tampering, old signatures
   assert(!await verifySignature(payload, `t=${t},v1=wrong`, secret));
 });
 
-Deno.test('checkout authenticates the account and chooses the price on the server', async () => {
+Deno.test('Stripe checkout is closed for every plan without contacting Stripe', async () => {
   const original = globalThis.fetch;
-  const user = '00000000-0000-4000-8000-000000000001';
-  let paid = false, checkout: URLSearchParams | null = null;
-  globalThis.fetch = async (input, init) => {
-    const url = String(input);
-    let data: any;
-    if (url.includes('/auth/v1/user')) data = { id: user, email: 'test@example.com' };
-    else if (url.includes('/rest/v1/billing_customers')) data = { customer_id: 'cus_example' };
-    else if (url.includes('/rest/v1/billing_purchases')) data = paid ? [{kind:'lifetime',active:true}] : [];
-    else if (url.includes('/subscriptions?')) data = { data: [] };
-    else if (url.endsWith('/checkout/sessions')) { checkout = new URLSearchParams(String(init?.body)); data = {url:'https://checkout.stripe.com/test'}; }
-    else throw new Error('Unexpected request ' + url);
-    return new Response(JSON.stringify(data), { headers: {'Content-Type':'application/json'} });
+  globalThis.fetch = async (input) => {
+    assert(String(input).includes('/auth/v1/user'), 'Closed checkout must not contact Stripe or billing tables');
+    return Response.json({id:'00000000-0000-4000-8000-000000000001'});
   };
-  const request = (body: unknown, token = 'test-token', origin = 'https://faintr.com') => new Request('https://database.example/functions/v1/billing', {
-    method: 'POST', headers: { 'Content-Type':'application/json', origin, ...(token ? {Authorization:`Bearer ${token}`} : {}) }, body: JSON.stringify(body) });
+  const request = (plan: string, token = 'test-token') => new Request('https://database.example/functions/v1/billing', {
+    method:'POST',headers:{'Content-Type':'application/json',origin:'https://faintr.com',...(token?{Authorization:'Bearer '+token}:{})},
+    body:JSON.stringify({action:'checkout',plan})});
   try {
-    assert((await handleBilling(request({action:'checkout',plan:'monthly'}, ''))).status === 401);
-    assert((await handleBilling(request({action:'checkout',plan:'monthly'}, 'test-token','https://evil.example'))).status === 403);
-    assert((await handleBilling(request({action:'checkout',plan:'free'}))).status === 400);
-    const response = await handleBilling(request({action:'checkout',plan:'monthly',userId:'attacker',price:'price_free'}));
-    assert(response.status === 200);
-    const sent = checkout as unknown as URLSearchParams;
-    assert(sent.get('line_items[0][price]') === 'price_monthly');
-    assert(sent.get('client_reference_id') === user);
-    assert(sent.get('mode') === 'subscription');
-    paid = true; checkout = null;
-    assert((await handleBilling(request({action:'checkout',plan:'monthly'}))).status === 409);
-    assert(checkout === null, 'Do not charge an account that already has access');
-  } finally { globalThis.fetch = original; }
+    assert((await handleBilling(request('monthly',''))).status === 401);
+    for(const plan of ['monthly','lifetime','free']) assert((await handleBilling(request(plan))).status === 410);
+  } finally { globalThis.fetch=original; }
 });
 
 Deno.test('fresh Stripe state controls access, including cancellation, refunds and account isolation', async () => {

@@ -1409,6 +1409,10 @@ syncThemeBtn();
 // Discord and Patreon links come from config.js
 [['#discordBtn', 'discordUrl'], ['#discordBtn2', 'discordUrl'], ['#patreonBtn', 'patreonUrl']].forEach(([sel, key]) => {
   const a = $(sel); if (!a) return;
+  if (WEB && key === 'patreonUrl' && !CFG.patreonReady) {
+    a.href = '#'; a.removeAttribute('target'); a.title = 'Patreon setup in progress';
+    a.addEventListener('click', e => { e.preventDefault(); showView('vip'); showToast('Patreon memberships are being connected. New signups are paused.'); }); return;
+  }
   if (CFG[key]) a.href = CFG[key];
   else { a.href = '#'; a.title = 'Link coming soon'; a.addEventListener('click', (e) => { e.preventDefault(); showToast('That link is coming soon.'); }); }
 });
@@ -1498,8 +1502,8 @@ function syncPremium() {
   $('#premiumManage').hidden = !B.state.user;
   $('#premiumRefresh').hidden = !B.state.user;
   $('#authBilling').hidden = false; $('#authExport').hidden = false;
-  $('#authIntro').textContent = 'Sign in to purchase VIP access and use Anti-Meta, Pokémon storage and saved teams across your devices. Team search, grading, matchups and IV tools are free.';
-  $('#premiumMembership').textContent = paid ? (member.plan === 'lifetime' ? 'Your one-time purchase is active.' : `${member.cancelAtPeriodEnd ? 'Your membership ends' : 'Your next renewal is'} ${new Date(member.expiresAt).toLocaleDateString()}.`) : 'Choose either option to unlock every VIP feature.';
+  $('#authIntro').textContent = 'Sign in to link your Patreon membership and use VIP across your devices. Team search, grading, matchups and IV tools are free.';
+  $('#premiumMembership').textContent = paid ? 'Your VIP access is active.' : (B.config.patreonReady ? 'One Patreon membership unlocks every VIP feature.' : 'We’re connecting Patreon. New VIP signups are paused while we finish setup.');
   $('#premiumNotice').hidden = paid;
   $('#vipMembership').textContent = paid ? $('#premiumMembership').textContent : '';
   $('#vipPlanCards').hidden = paid;
@@ -1548,7 +1552,7 @@ if (PREMIUM) {
     if (!window.FAINTR_BRIDGE.state.user) { $('#premiumDlg').close(); AUTH.returnToPremium = true; setAuthMode('in'); openAuth(); return; }
     const buttons = $$('[data-plan]'); buttons.forEach(b => b.disabled = true);
     const status = btn.closest('#view-vip') ? $('#vipStatus') : $('#premiumStatus');
-    status.textContent = 'Opening secure checkout…';
+    status.textContent = 'Opening Patreon…';
     try { await window.FAINTR_BRIDGE.billing.checkout(btn.dataset.plan); } catch (err) { status.textContent = err.message; buttons.forEach(b => b.disabled = false); }
   });
   $('#premiumManage').addEventListener('click', async () => {

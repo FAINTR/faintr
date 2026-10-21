@@ -124,8 +124,11 @@
       if (error) { let message = 'Billing is temporarily unavailable.'; try { message = (await error.context.json()).error || message; } catch (_) {} throw new Error(message); }
       return data;
     },
-    async checkout(plan) { const result = await billing.call({ action: 'checkout', plan }); location.assign(result.url); },
-    async portal() { const result = await billing.call({ action: 'portal' }); location.assign(result.url); },
+    async checkout() {
+      if (!CFG.patreonReady) throw new Error('Patreon memberships are being connected. New signups are paused; your existing access is unchanged.');
+      location.assign(CFG.patreonUrl);
+    },
+    async portal() { location.assign('https://www.patreon.com/settings/memberships'); },
     async exportData() {
       if (!state.user) throw new Error('Sign in to download your data.');
       const { data, error } = await state.sb.rpc('export_my_storage');

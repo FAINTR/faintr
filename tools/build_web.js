@@ -270,7 +270,7 @@ function assemble(src, version, built, formats) {
   fs.rmSync(path.join(tmp, 'static/index.html'));
   // Site settings from the environment (GitHub repository variables), so nobody edits code to change a link
   const env = (k) => (process.env[k] || '').trim();
-  const cfg = { discordUrl: env('FAINTR_DISCORD_URL'), patreonUrl: env('FAINTR_PATREON_URL'), supabaseUrl: env('SUPABASE_URL').replace(/\/$/, ''), supabaseAnonKey: env('SUPABASE_ANON_KEY'), loginProviders: env('FAINTR_LOGIN_PROVIDERS').toLowerCase(), billingEnabled: PREMIUM };
+  const cfg = { discordUrl: env('FAINTR_DISCORD_URL'), patreonUrl: env('FAINTR_PATREON_URL') || 'https://www.patreon.com/c/FAINTR', patreonReady: env('FAINTR_PATREON_READY') === 'true', supabaseUrl: env('SUPABASE_URL').replace(/\/$/, ''), supabaseAnonKey: env('SUPABASE_ANON_KEY'), loginProviders: env('FAINTR_LOGIN_PROVIDERS').toLowerCase(), billingEnabled: PREMIUM };
   if (PREMIUM) {
     if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) throw new Error('Premium requires Supabase.');
     const worker = fs.readFileSync(path.join(ROOT, 'web/premium-worker.js'), 'utf8')
