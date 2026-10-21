@@ -1,5 +1,6 @@
 import { db, stripe, form, price, site, syncCheckout, checked } from '../_shared/billing.ts';
 import { checkReadiness } from './readiness.ts';
+import { checkoutTerms, policyVersion } from './checkout-terms.ts';
 
 export async function handleBilling(req: Request) {
   const origin = req.headers.get('origin') || '';
@@ -58,14 +59,14 @@ export async function handleBilling(req: Request) {
     // Catch subscriptions even if their webhook hasn't arrived yet.
     const subs = await stripe('subscriptions?customer=' + encodeURIComponent(customer.customer_id) + '&status=all&limit=100');
     if (subs.data.some((s: any) => ['active', 'trialing', 'past_due', 'unpaid', 'incomplete', 'paused'].includes(s.status))) return reply({ error: 'A subscription already exists. Use Manage billing.' }, 409);
-    const values: Record<string, string> = { customer: customer.customer_id, mode: body.plan === 'monthly' ? 'subscription' : 'payment',
+    const values: Record<string, string> = { ...checkoutTerms(body.plan), customer: customer.customer_id, mode: body.plan === 'monthly' ? 'subscription' : 'payment',
       client_reference_id: user.id, 'line_items[0][price]': price(body.plan)!, 'line_items[0][quantity]': '1',
       'metadata[faintr_plan]': body.plan, 'metadata[faintr_user]': user.id,
       success_url: site() + '/?checkout=success&session_id={CHECKOUT_SESSION_ID}', cancel_url: site() + '/?checkout=canceled' };
     const prefix = body.plan === 'monthly' ? 'subscription_data' : 'payment_intent_data';
     values[`${prefix}[metadata][faintr_user]`] = user.id;
     values[`${prefix}[metadata][faintr_plan]`] = body.plan;
-    const session = await stripe('checkout/sessions', form(values), `faintr-checkout-${user.id}-${body.plan}-${Math.floor(Date.now() / 300000)}`);
+    const session = await stripe('checkout/sessions', form(values), `faintr-checkout-${policyVersion}-${user.id}-${body.plan}-${Math.floor(Date.now() / 300000)}`);
     return reply({ url: session.url });
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Could not start billing.';

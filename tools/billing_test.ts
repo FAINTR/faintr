@@ -27,7 +27,13 @@ Deno.test('operator readiness verifies live prices and reports a wrong amount', 
       writes++;
       const body = new URLSearchParams(String(init.body));
       assert(!body.has('payment_method_types') && !body.has('payment_method'));
-      return Response.json(url.endsWith('/customers') ? {id:'cus_synthetic'} : {status:'open',payment_status:'unpaid',url:'https://stripe.example/verification'});
+      if (url.endsWith('/checkout/sessions')) {
+        assert(body.get('consent_collection[terms_of_service]') === 'required', 'Payment must require an affirmative terms agreement');
+        const disclosure = body.get('custom_text[submit][message]') || '';
+        assert(body.get('metadata[faintr_terms_version]') === '2026-10-21');
+        assert(body.get('mode') === 'subscription' ? disclosure.includes('each month until you cancel') && disclosure.includes('Manage billing') : disclosure.includes('no recurring charge'));
+      }
+      return Response.json(url.endsWith('/customers') ? {id:'cus_synthetic'} : {status:'open',payment_status:'unpaid',url:'https://stripe.example/verification',consent_collection:{terms_of_service:'required'}});
     }
     const data = url.includes('/prices/price_monthly') ? {active:true,livemode:true,currency:'usd',unit_amount:amount,recurring:{interval:'month'}}
       : url.includes('/prices/price_lifetime') ? {active:true,livemode:true,currency:'usd',unit_amount:1000,type:'one_time'}

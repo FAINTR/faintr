@@ -1,4 +1,5 @@
 import { db, checked, form, price, serverKey, site, stripe } from '../_shared/billing.ts';
+import { checkoutTerms, policyVersion } from './checkout-terms.ts';
 
 // Operator-only checks. The optional probe creates unpaid, short-lived checkouts
 // for a synthetic customer; it never submits payment or grants membership.
@@ -43,13 +44,13 @@ export async function checkReadiness(token: string, checkoutProbe = false) {
       const probeWindow = Math.floor(Date.now() / 300000);
       for (const plan of ['monthly', 'lifetime']) {
         stage = 'checkout_' + plan;
-        const session = await stripe('checkout/sessions', form({ customer: customer.id,
+        const session = await stripe('checkout/sessions', form({ ...checkoutTerms(plan), customer: customer.id,
           mode: plan === 'monthly' ? 'subscription' : 'payment',
           'line_items[0][price]': price(plan)!, 'line_items[0][quantity]': '1',
           'metadata[faintr_verification]': 'unpaid_checkout_probe',
           success_url: site(), cancel_url: site(), expires_at: String(probeWindow * 300 + 2160),
-        }), `faintr-readiness-${plan}-${probeWindow}`);
-        checks['checkout_' + plan] = session.status === 'open' && session.payment_status === 'unpaid' && !!session.url;
+        }), `faintr-readiness-${policyVersion}-${plan}-${probeWindow}`);
+        checks['checkout_' + plan] = session.status === 'open' && session.payment_status === 'unpaid' && !!session.url && session.consent_collection?.terms_of_service === 'required';
       }
       stage = 'billing_portal';
       const portal = await stripe('billing_portal/sessions', form({ customer: customer.id, return_url: site() }));
