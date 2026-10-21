@@ -25,7 +25,7 @@ function readData(u) {
     x.open('GET', fileUrl('pvpoke/' + rel), false);
     x.send();
     if (x.status !== 200) throw new Error(`Couldn't load ${rel} (${x.status}).`);
-    FILES[rel] = JSON.parse(x.responseText);
+    FILES[rel] = JSON.parse(x.responseText.replace(/^\uFEFF/, ''));
   }
   return FILES[rel];
 }

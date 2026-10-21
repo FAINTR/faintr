@@ -103,7 +103,7 @@ jobs:
           node tools/build_web.js "${args[@]}"
 
       - name: Save built data
-        if: steps.gate.outputs.skip != 'true'
+        if: always() && steps.gate.outputs.skip != 'true'
         uses: actions/cache/save@v4
         with:
           path: .webcache

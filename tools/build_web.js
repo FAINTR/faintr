@@ -41,7 +41,7 @@ const ONLY = (opt('formats', '') || '').split(',').map((s) => s.trim()).filter(B
 const FORCE = flag('force'), ONLY_BUILT = flag('only-built'), FETCH = flag('fetch');
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
-const readJ = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return d; } };
+const readJ = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, '')); } catch (e) { return d; } };
 const writeJ = (f, v) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(v)); };
 
 function get(url) {

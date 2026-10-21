@@ -13,7 +13,7 @@ function readData(url) {
   // url looks like "/data/rankings/all/overall/rankings-1500.json?v=1"
   let rel = url.split('?')[0].replace(/^\/+/, '');
   if (rel.endsWith('gamemaster.min.json')) rel = rel.replace('gamemaster.min.json', 'gamemaster.json');
-  return JSON.parse(fs.readFileSync(path.join(SRC_DIR, rel), 'utf8'));
+  return JSON.parse(fs.readFileSync(path.join(SRC_DIR, rel), 'utf8').replace(/^\uFEFF/, ''));
 }
 
 function makeJQ() {
