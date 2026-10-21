@@ -1,6 +1,7 @@
 # Weekly encrypted backup of the FAINTR database (accounts, Rosters, saved teams, bug reports).
 # Supabase's free plan has no backups, so this keeps the last 5 weeks as private GitHub artifacts.
-# Needs two repository secrets: SUPABASE_DB_URL (Session pooler connection string) and BACKUP_PASSPHRASE.
+# Needs SUPABASE_DB_URL (Session pooler connection string) and BACKUP_PASSPHRASE.
+# SUPABASE_DB_PASSWORD may hold the password separately, avoiding URI encoding.
 # Restore: see docs/WEBSITE_SETUP.md, "Backups".
 name: FAINTR database backup
 
@@ -37,6 +38,7 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         env:
           DB: ${{ secrets.SUPABASE_DB_URL }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           PASS: ${{ secrets.BACKUP_PASSPHRASE }}
         run: |
           stamp=$(date -u +%Y-%m-%d)

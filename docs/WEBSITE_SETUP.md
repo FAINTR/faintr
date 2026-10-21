@@ -114,7 +114,8 @@ Admins see the bug report inbox in the Report a Bug tab, and **Dev tools** under
 | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | the token from step 4.3 |
 | `CLOUDFLARE_ACCOUNT_ID` | the ID from step 4.2 |
-| `SUPABASE_DB_URL` | for backups. In Supabase, click **Connect** and copy the **Session pooler** connection string, with `[YOUR-PASSWORD]` replaced by your database password |
+| `SUPABASE_DB_URL` | for backups. The **Session pooler** URI without a password (for example `postgresql://postgres.PROJECT@HOST:5432/postgres?sslmode=require`). An existing URI with a password still works. |
+| `SUPABASE_DB_PASSWORD` | your database password, entered directly as a secret. No URI encoding is needed when the password is stored separately. |
 | `BACKUP_PASSPHRASE` | a long random phrase you save in your password manager. Backups can't be opened without it |
 
 **Variables** tab (not secret; they end up in the public page):
@@ -183,7 +184,7 @@ Supabase's free plan has no backups, so **FAINTR database backup** runs every Su
 
 - It saves an encrypted copy of accounts, Rosters, saved teams and bug reports as a GitHub artifact.
 - Each copy is kept for 35 days.
-- It needs the `SUPABASE_DB_URL` and `BACKUP_PASSPHRASE` secrets.
+- It needs the `SUPABASE_DB_URL`, `SUPABASE_DB_PASSWORD` and `BACKUP_PASSPHRASE` secrets (the separate password is optional for an existing URI that already contains it).
 - Run it by hand any time from the Actions tab.
 
 To restore (rarely needed; ask Claude to walk you through it):
