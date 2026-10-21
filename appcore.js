@@ -12,6 +12,7 @@ const M = require('./metrics');
 const { describe, query, tierCuts } = require('./teamdata');
 const { Scorer, PERMS } = require('./scoring');
 const { buildReport, gradesFor } = require('./report');
+const { upgradeCandidates } = require('./viptools');
 
 const DEFAULT_F = 'all-1500';
 const IV_FLOORS = [0, 1, 2, 3, 4, 5, 10, 12];
@@ -406,6 +407,18 @@ function createCore(env) {
   async function handle(method, p, q, body) {
     q = q || {}; body = body || {};
     if (method === 'GET') {
+      if (p === '/api/vip/upgrades') {
+        const st = await builtState(q.f);
+        const roster = await env.storage.rosterAll();
+        const { ready, candidates } = upgradeCandidates(roster, st.matrix.statics, st.catalog, st.F.cp);
+        const best = (ids, include) => query(st.D, { owned: ids, include: include ? [include] : [], limit: 1 }).teams[0] || null;
+        const baseline = best(ready);
+        const suggestions = candidates.map(c => {
+          const team = best([...new Set([...ready, c.id])], c.id);
+          return { ...c, team, improvement: baseline && team ? team.composite - baseline.composite : null };
+        }).sort((a, b) => (b.improvement || 0) - (a.improvement || 0) || a.poolRank - b.poolRank);
+        return { format: st.F.title, baseline, readyCount: ready.length, suggestions: suggestions.slice(0, 10) };
+      }
       if (p === '/api/info') {
         const gl = await fstate(DEFAULT_F);
         return { live: env.live(), app: env.info.app, version: env.info.version, source: env.info.source, web: !!env.info.web,

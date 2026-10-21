@@ -4,3 +4,6 @@ site/
 site.new/
 .webcache/
 *.log
+.env
+.env.*
+supabase/functions/.env

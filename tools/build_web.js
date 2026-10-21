@@ -22,7 +22,7 @@ const zlib = require('zlib');
 const crypto = require('crypto');
 const ROOT = path.join(__dirname, '..');
 const rq = (m) => require(path.join(ROOT, m));
-const { listFormats, dataFilesFor, rankingFile, loadSchedule } = rq('formats');
+const { listFormats, dataFilesFor, rankingFile, loadSchedule, periodAt } = rq('formats');
 const { ENGINE_FILES } = rq('engine');
 const { buildAll, SCHEMA } = rq('build');
 const { loadTeams } = rq('teamdata');
@@ -39,6 +39,7 @@ const CACHE = path.resolve(opt('cache', path.join(ROOT, '.webcache')));
 const SEED = path.resolve(opt('seed', path.join(ROOT, 'assets/data')));
 const ONLY = (opt('formats', '') || '').split(',').map((s) => s.trim()).filter(Boolean);
 const FORCE = flag('force'), ONLY_BUILT = flag('only-built'), FETCH = flag('fetch');
+const PREMIUM = process.env.FAINTR_BILLING_ENABLED === 'true';
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const readJ = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, '')); } catch (e) { return d; } };
@@ -125,10 +126,14 @@ const hasData = (dir) => readJ(path.join(dir, 'teams.json'), {}).schema === SCHE
 async function buildFormats(src, version, formats) {
   const dataRoot = path.join(CACHE, 'data');
   const results = [];
+  const live = periodAt(loadSchedule(path.join(ROOT, 'schedule.json')), formats);
+  const activeKeys = new Set(live.now ? live.now.formats.map(f => f.key) : ['all-1500', 'all-2500', 'all-10000']);
   for (const F of formats) {
     const dir = path.join(dataRoot, F.key), hash = inputHash(src, F);
     const prev = readJ(path.join(dir, 'inputs.json'), {});
-    const wanted = !ONLY.length || ONLY.includes(F.key);
+    // Nightly refreshes focus on the live rotation. An explicit --formats request
+    // can still prepare a different cup later, without rebuilding future cups now.
+    const wanted = ONLY.length ? ONLY.includes(F.key) : !FETCH || activeKeys.has(F.key);
     let state = 'reused';
     if (wanted && (FORCE || prev.hash !== hash || !hasData(dir))) {
       // Already-built data shipped with the app counts if it was built from these exact inputs
@@ -212,7 +217,7 @@ function assemble(src, version, built, formats) {
   const pvFiles = new Set([...ENGINE_FILES, ...dataFilesFor(formats)]);
   for (const f of pvFiles) { const p = path.join(src, f); if (fs.existsSync(p)) publish('pvpoke/' + f, fs.readFileSync(p)); }
   // Team data
-  const fmtList = [];
+  const fmtList = [], premiumData = {};
   for (const r of built) {
     const entry = { ...r.F, built: false, nTeams: null };
     if (r.ok) {
@@ -220,7 +225,8 @@ function assemble(src, version, built, formats) {
       publish(base + 'teams.json', Buffer.from(JSON.stringify(w.info)));
       publish(base + 'teams.bin.gz', w.bin, '.bin'); // .bin so no host adds its own Content-Encoding
       publish(base + 'matrix.json', fs.readFileSync(path.join(r.dir, 'matrix.json')));
-      publish(base + 'antimeta.json', fs.readFileSync(path.join(r.dir, 'antimeta.json')));
+      if (PREMIUM) premiumData[r.F.key] = readJ(path.join(r.dir, 'antimeta.json'));
+      else publish(base + 'antimeta.json', fs.readFileSync(path.join(r.dir, 'antimeta.json')));
       if (fs.existsSync(path.join(r.dir, 'meta-changes.json'))) publish(base + 'meta-changes.json', fs.readFileSync(path.join(r.dir, 'meta-changes.json')));
       Object.assign(entry, { built: true, nTeams: w.nTeams, pvpoke: w.info.pvpoke, dataBuilt: w.info.built });
     }
@@ -240,24 +246,34 @@ function assemble(src, version, built, formats) {
   fs.rmSync(path.join(tmp, 'static/index.html'));
   // Site settings from the environment (GitHub repository variables), so nobody edits code to change a link
   const env = (k) => (process.env[k] || '').trim();
-  const cfg = { discordUrl: env('FAINTR_DISCORD_URL'), patreonUrl: env('FAINTR_PATREON_URL'), supabaseUrl: env('SUPABASE_URL').replace(/\/$/, ''), supabaseAnonKey: env('SUPABASE_ANON_KEY'), loginProviders: env('FAINTR_LOGIN_PROVIDERS').toLowerCase() };
+  const cfg = { discordUrl: env('FAINTR_DISCORD_URL'), patreonUrl: env('FAINTR_PATREON_URL'), supabaseUrl: env('SUPABASE_URL').replace(/\/$/, ''), supabaseAnonKey: env('SUPABASE_ANON_KEY'), loginProviders: env('FAINTR_LOGIN_PROVIDERS').toLowerCase(), billingEnabled: PREMIUM };
+  if (PREMIUM) {
+    if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) throw new Error('Premium requires Supabase.');
+    const worker = fs.readFileSync(path.join(ROOT, 'web/premium-worker.js'), 'utf8')
+      .replace('const data = __PREMIUM_DATA__;', `const data = ${JSON.stringify(premiumData)};`)
+      .replace('const supabaseUrl = __SUPABASE_URL__;', `const supabaseUrl = ${JSON.stringify(cfg.supabaseUrl)};`)
+      .replace('const supabaseKey = __SUPABASE_KEY__;', `const supabaseKey = ${JSON.stringify(cfg.supabaseAnonKey)};`);
+    fs.writeFileSync(path.join(tmp, '_worker.js'), worker);
+    fs.writeFileSync(path.join(tmp, '_routes.json'), JSON.stringify({ version: 1, include: ['/api/premium/*'], exclude: [] }));
+  }
   const cfgJs = `window.FAINTR_CONFIG = Object.assign(${JSON.stringify(cfg)}, window.FAINTR_CONFIG || {});\n`;
   fs.writeFileSync(path.join(tmp, 'static/config.js'), cfgJs);
   fs.mkdirSync(path.join(tmp, 'static/vendor'), { recursive: true });
   fs.copyFileSync(require.resolve('@supabase/supabase-js/dist/umd/supabase.js', { paths: [ROOT] }), path.join(tmp, 'static/vendor/supabase.js'));
   fs.copyFileSync(path.join(ROOT, 'web/bridge.js'), path.join(tmp, 'static/bridge.js'));
+  esbuild.buildSync({ stdin: { contents: 'window.FAINTR_VIP_TOOLS = require("./viptools");', resolveDir: ROOT }, bundle: true, platform: 'browser', format: 'iife', outfile: path.join(tmp, 'static/viptools.js'), minify: true });
   fs.copyFileSync(path.join(ROOT, 'metrics.js'), path.join(tmp, 'metrics.js'));
   fs.copyFileSync(path.join(ROOT, 'CHANGELOG.md'), path.join(tmp, 'changelog.md'));
   const v = (rel) => sha(fs.readFileSync(path.join(tmp, rel))).slice(0, 10);
   let html = fs.readFileSync(path.join(ROOT, 'ui/index.html'), 'utf8');
   html = html.replace('<!--WEB-HEAD-->', `<meta name="description" content="FAINTR: Pokémon GO PvP team builder, team grader, IV ranks and Anti-Meta teams, built on PvPoke's battle simulator.">
 <meta property="og:title" content="FAINTR: Win the matchup"><meta property="og:description" content="Pokémon GO PvP teams that actually win, ranked and graded on PvPoke's battle engine."><meta name="theme-color" content="#2B2F3A">`)
-    .replace('<!--WEB-SCRIPTS-->', `<script src="/static/vendor/supabase.js?v=${v('static/vendor/supabase.js')}"></script>\n<script src="/static/bridge.js?v=${v('static/bridge.js')}"></script>`)
+    .replace('<!--WEB-SCRIPTS-->', `<script src="/static/vendor/supabase.js?v=${v('static/vendor/supabase.js')}"></script>\n<script src="/static/viptools.js?v=${v('static/viptools.js')}"></script>\n<script src="/static/bridge.js?v=${v('static/bridge.js')}"></script>`)
     .replace(/(href|src)="\/(static\/[^"?]+\.(?:css|js)|metrics\.js)"/g, (m, attr, rel) => `${attr}="/${rel}?v=${v(rel)}"`);
   fs.writeFileSync(path.join(tmp, 'index.html'), html);
   // Manifest: the only file that changes name-in-place; never cached
   const schedule = loadSchedule(path.join(ROOT, 'schedule.json'));
-  const manifest = { appVersion: PKG.version, pvpoke: version, built: new Date().toISOString(), schedule, formats: fmtList, files, sizes };
+  const manifest = { appVersion: PKG.version, pvpoke: version, built: new Date().toISOString(), premium: PREMIUM, schedule, formats: fmtList, files, sizes };
   fs.writeFileSync(path.join(tmp, 'manifest.json'), JSON.stringify(manifest));
   fs.writeFileSync(path.join(tmp, '_headers'), [
     '/d/*', '  Cache-Control: public, max-age=31536000, immutable', '  Access-Control-Allow-Origin: *', '',

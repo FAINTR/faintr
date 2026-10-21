@@ -113,7 +113,7 @@ async function loadFormatData(F) {
   const label = `Loading ${F.title} teams`;
   const [info, matrixRaw, anti, changes, bin] = await Promise.all([
     json(base + 'teams.json'), json(base + 'matrix.json'),
-    json(base + 'antimeta.json').catch(() => null), MANIFEST.files[base + 'meta-changes.json'] ? json(base + 'meta-changes.json').catch(() => null) : null,
+    (MANIFEST.premium ? toMain('premiumAnti', [F.key]) : json(base + 'antimeta.json')).catch(() => null), MANIFEST.files[base + 'meta-changes.json'] ? json(base + 'meta-changes.json').catch(() => null) : null,
     fetchBytes(base + 'teams.bin.gz', label).then((b) => (b[0] === 0x1f && b[1] === 0x8b ? gunzip(b) : b)),
   ]);
   const matrix = unpackMatrix(matrixRaw);
@@ -155,7 +155,8 @@ self.onmessage = async (e) => {
   if (m.type === 'api') {
     try {
       let result;
-      if (m.path === '/core/regrade') result = await core.regradeSaved();
+      if (m.path === '/core/membership') { core.forget(); result = { ok: true }; }
+      else if (m.path === '/core/regrade') result = await core.regradeSaved();
       else if (m.path === '/core/refresh-roster') result = await core.refreshRosterEvals();
       else result = await core.handle(m.method, m.path, m.q, m.body);
       if (result === undefined) self.postMessage({ id: m.id, error: 'Not available on the website.', code: 404 });

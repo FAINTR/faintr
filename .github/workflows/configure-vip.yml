@@ -1,0 +1,46 @@
+name: Configure VIP accounts
+on:
+  workflow_dispatch:
+    inputs:
+      grant_owner:
+        description: Grant complimentary VIP to the verified owner account
+        type: boolean
+        default: false
+      activate_paywall:
+        description: Activate paid storage rules after payment testing
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: faintr-vip-setup
+  cancel-in-progress: false
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    container: postgres:17
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare billing and VIP storage
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/002_billing.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/004_vip_tools.sql
+      - name: Grant verified owner access
+        if: inputs.grant_owner
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          OWNER_EMAIL: ${{ secrets.FAINTR_OWNER_EMAIL }}
+        run: psql "$DB_URL" -v ON_ERROR_STOP=1 -v owner_name=skaggshood -v owner_email="$OWNER_EMAIL" -f supabase/owner_access.sql
+      - name: Activate paid storage rules
+        if: inputs.activate_paywall
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PAYMENTS_READY: ${{ vars.FAINTR_PAYMENTS_READY }}
+        run: |
+          if [ "$PAYMENTS_READY" != "true" ]; then echo "Finish payment checks before activating the paywall."; exit 1; fi
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/003_activate_paywall.sql

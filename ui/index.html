@@ -33,6 +33,7 @@
       <button role="tab" aria-selected="false" data-view="ivs">PvP IVs</button>
       <button role="tab" aria-selected="false" data-view="meta">Meta</button>
       <button role="tab" aria-selected="false" data-view="saved">My Teams</button>
+      <button role="tab" aria-selected="false" data-view="vip" id="vipTab" hidden>VIP</button>
       <button role="tab" aria-selected="false" data-view="news">What's New</button>
       <button role="tab" aria-selected="false" data-view="bugs">Report a Bug</button>
     </nav>
@@ -40,6 +41,7 @@
       <a class="social discord" id="discordBtn" href="#" target="_blank" rel="noopener"><i aria-hidden="true"></i>Discord</a>
       <a class="social patreon" id="patreonBtn" href="#" target="_blank" rel="noopener"><i aria-hidden="true"></i>Patreon</a>
       <button type="button" id="accountBtn" hidden>Sign in</button>
+      <button type="button" id="premiumBtn" hidden>Get VIP</button>
     </div>
   </div>
   <div class="fmtbar">
@@ -260,6 +262,46 @@
 
   <!-- What's New -->
   <section class="view" id="view-news"><div class="panel md" id="changelog"></div></section>
+  <section class="view vipview" id="view-vip" aria-labelledby="vipTitle">
+    <div class="viphero" id="vipHero">
+      <div class="vipintro"><span class="vipbadge">FAINTR VIP <span aria-hidden="true">✦</span></span>
+        <h1 id="vipTitle">Build stronger teams.<br><em>Back FAINTR.</em></h1>
+        <p>Turn your Pokémon into a plan. Unlock every VIP tool, keep your best teams close, and help FAINTR keep growing.</p>
+        <a class="btn vipcta" href="#vipPlans">Unlock your VIP access <span aria-hidden="true">↗</span></a>
+        <span class="viptrust">One account. Every device. Your competitive toolkit.</span>
+      </div>
+      <div class="vipcrest" aria-hidden="true"><svg viewBox="0 0 260 300"><path d="M130 12 238 49v111c0 60-52 101-108 128C74 261 22 220 22 160V49Z" fill="none" stroke="#F5B800" stroke-width="2"/><path d="M130 28 224 61v98c0 51-44 88-94 113-50-25-94-62-94-113V61Z" fill="none" stroke="#F5B800" stroke-opacity=".18"/><path d="m16 139 14-9m200 0 14 9M70 26l6 13m108 0 6-13" stroke="#F5B800" stroke-width="3"/></svg><img src="/static/brand/faintr-icon.svg" alt="" width="132" height="132"><span>TRAINER. BUILDER. BACKER.</span></div>
+    </div>
+    <section class="vipdashboard" id="vipDashboard" hidden aria-labelledby="vipDashboardTitle">
+      <div class="viewhead"><span class="vipbadge">YOUR VIP TOOLKIT</span><h1 id="vipDashboardTitle">Build. Battle. Get better.</h1><p>Track your results, plan your next build, and see when the meta moves your saved teams.</p></div>
+      <nav class="viptoolnav" aria-label="VIP tools"><a href="#vipBattleLog">Battle log</a><a href="#vipUpgrades">Upgrade planner</a><a href="#vipAlerts">Team alerts <span id="vipAlertCount"></span></a><button class="btn small" type="button" data-goto="roster">Open Roster</button><button class="btn small" type="button" data-goto="saved">Open My Teams</button></nav>
+      <section class="panel viptool" id="vipBattleLog"><div class="viptoolhead"><div><span class="vipnumber">YOUR GAMES. YOUR PROGRESS.</span><h2>Battle log</h2></div><button type="button" class="btn small" id="battleLogRefresh">Refresh</button></div>
+        <p class="note">Log games with a saved team. Win rate excludes draws; the trend shows a rolling window of up to 20 logged battles.</p>
+        <form id="battleLogForm" class="battlelogform"><label>Saved team<select id="battleLogTeam" required></select></label><label>Result<select id="battleLogResult"><option value="win">Win</option><option value="loss">Loss</option><option value="draw">Draw</option></select></label><label>Played at<input id="battleLogDate" type="datetime-local" required></label><label class="battlelognotes">Notes <small>(optional)</small><input id="battleLogNotes" maxlength="500" placeholder="Lead, opponent lineup, or something to try next time"></label><button type="submit" class="btn vipcta">Log battle</button></form>
+        <div class="actions"><label class="field">Cup <select id="battleLogCupFilter"><option value="">All cups</option></select></label><label class="field">Team <select id="battleLogTeamFilter"><option value="">All teams</option></select></label></div>
+        <p id="battleLogStatus" class="note" role="status"></p><div id="battleLogStats"></div><div class="scroll" id="battleLogEntries"></div>
+      </section>
+      <section class="panel viptool" id="vipUpgrades"><div class="viptoolhead"><div><span class="vipnumber">BUILD WITH WHAT YOU OWN</span><h2>Upgrade planner</h2></div><button class="btn vipcta" type="button" id="vipUpgradeRun">Find my next build</button></div><p class="note" id="vipUpgradeIntro">Suggestions use your Roster and the cup selected at the top of the site.</p><div id="vipUpgradeResults" aria-live="polite"><p class="note">Add your Pokémon and current CP to the Roster, then find the builds that could open up stronger teams.</p></div></section>
+      <section class="panel viptool" id="vipAlerts"><div class="viptoolhead"><div><span class="vipnumber">KEEP UP WITH THE META</span><h2>Saved-team alerts</h2></div><button type="button" class="btn small" id="vipAlertsRead">Mark all read</button></div><p class="note">When you open FAINTR after a data update, your saved teams are graded again. Changes appear here. These are in-app alerts.</p><div id="vipAlertList" aria-live="polite"></div></section>
+    </section>
+    <div class="vipbenefits" id="vipBenefits">
+      <article><span class="vipnumber">01 / FIND YOUR EDGE</span><h2>Read the meta.<br>Build against it.</h2><p>Anti-Meta ranks teams against the format’s strongest varied teams, with the top picks checked on PvPoke’s engine.</p></article>
+      <article><span class="vipnumber">02 / KNOW YOUR ROSTER</span><h2>Your Pokémon.<br>Ready to build.</h2><p>Store your Pokémon, IVs and moves in your account. Find teams from what you own and pick up on another device.</p></article>
+      <article><span class="vipnumber">03 / KEEP THE GOOD ONES</span><h2>Save the team.<br>Keep refining.</h2><p>Keep your favorite lineups together in My Teams and revisit their grades when the data changes.</p></article>
+      <article><span class="vipnumber">04 / LEARN FROM EVERY SET</span><h2>Track your battles.<br>Spot your progress.</h2><p>Log wins and losses, compare teams and cups, and see your win-rate trend over time.</p></article>
+      <article><span class="vipnumber">05 / PLAN YOUR NEXT BUILD</span><h2>More from your box.<br>Less guesswork.</h2><p>Find Pokémon to power up or evolve from your own Roster, with team-score comparisons where enough Pokémon are ready.</p></article>
+      <article><span class="vipnumber">06 / STAY A STEP AHEAD</span><h2>The meta changes.<br>Your plans can too.</h2><p>See in-app alerts when new data changes a saved team’s grades, so you know which lineups deserve another look.</p></article>
+    </div>
+    <div class="vipplanhead" id="vipPlans"><div><span class="vipnumber">CHOOSE YOUR SHIELD</span><h2>Two ways in. Everything unlocked.</h2></div><p>Both options include every VIP feature.</p></div>
+    <p class="note" id="vipMembership" role="status"></p>
+    <div class="vipplans" id="vipPlanCards">
+      <article class="vipplan"><span class="vipbadge subtle">MONTHLY MEMBERSHIP</span><h3>Stay in the game.</h3><p class="vipprice">$3.99 <small>USD / month</small></p><ul><li>Anti-Meta, Roster and saved teams</li><li>Battle log and win-rate trends</li><li>Upgrade planner and team alerts</li><li>Access across your devices</li></ul><button class="btn vipcta" type="button" data-plan="monthly">Become a VIP <span aria-hidden="true">↗</span></button><p class="vipfine">Renews monthly. Cancel anytime in Manage billing. Access continues through your paid period.</p></article>
+      <article class="vipplan vipfull"><span class="vipbadge">ONE-TIME ACCESS</span><h3>One payment. Your full toolkit.</h3><p class="vipprice">$10 <small>USD once</small></p><ul><li>Anti-Meta, Roster and saved teams</li><li>Battle log and win-rate trends</li><li>Upgrade planner and team alerts</li><li>No monthly payments</li></ul><button class="btn vipcta" type="button" data-plan="lifetime">Unlock full access <span aria-hidden="true">↗</span></button><p class="vipfine">A one-time unlock for this account, for as long as FAINTR offers these features.</p></article>
+    </div>
+    <div class="vipafter"><p>Secure checkout with Stripe. Sign in to link your access to your FAINTR account.</p><button class="btn" id="vipManage" type="button" hidden>Manage billing</button><button class="btn quiet" id="vipRefresh" type="button" hidden>Refresh access</button></div>
+    <p id="vipStatus" role="status" aria-live="polite"></p>
+    <div class="vipfree"><b>A stronger FAINTR starts with you.</b><p>Your support helps keep the project moving. Team search, Team Grader, Matchups, PvP IVs, and Meta stay free for everyone.</p></div>
+  </section>
 </main>
 
 <footer class="legal">
@@ -336,7 +378,7 @@
 <dialog id="authDlg" class="authdlg">
   <div id="authOut">
     <h2 id="authTitle">Sign in to FAINTR</h2>
-    <p class="note">Your Roster and saved teams follow you to any device. Everything else works without an account.</p>
+    <p class="note" id="authIntro">Your Roster and saved teams follow you to any device. Everything else works without an account.</p>
     <span class="seg" id="authMode" role="group" aria-label="Sign in or create an account"><button type="button" data-m="in" aria-pressed="true">Sign in</button><button type="button" data-m="up" aria-pressed="false">Create account</button></span>
     <form id="authForm" autocomplete="on">
       <div id="authNameRow" hidden><label class="field" for="authName">Trainer name</label><input type="text" id="authName" maxlength="40" autocomplete="nickname"></div>
@@ -354,7 +396,7 @@
     <div class="actions" style="margin-top:0"><input type="text" id="authNewName" maxlength="40"><button class="btn small" type="button" id="authSaveName">Save</button></div>
     <div id="authMove" hidden class="note" style="margin-top:12px"></div>
     <div id="authNewPass" hidden><label class="field" for="authPass2">New password</label><div class="actions" style="margin-top:0"><input type="password" id="authPass2" minlength="8" autocomplete="new-password"><button class="btn small" type="button" id="authSetPass">Set password</button></div></div>
-    <div class="actions"><button class="btn" type="button" id="authSignOut">Sign out</button></div>
+    <div class="actions"><button class="btn" type="button" id="authSignOut">Sign out</button><button class="btn" type="button" id="authBilling" hidden>Manage membership</button><button class="btn" type="button" id="authExport" hidden>Download my data</button></div>
     <details class="authdanger"><summary>Delete my account</summary>
       <p class="note">This permanently deletes your account, your Roster and your saved teams. Download your Roster first from the Roster tab if you want a copy.</p>
       <div class="actions"><button class="btn small" type="button" id="authDelete">Delete my account</button><span class="confirm" id="authDeleteConfirm" hidden>Sure? This can't be undone. <button class="btn small primary" type="button" id="authDeleteYes">Yes, delete it</button></span></div>
@@ -362,6 +404,18 @@
     <p class="note" id="authStatus2"></p>
   </div>
   <div class="actions" style="justify-content:flex-end"><button class="btn quiet" type="button" id="authClose">Close</button></div>
+</dialog>
+<dialog id="premiumDlg" class="authdlg premiumdlg" aria-labelledby="premiumTitle">
+  <h2 id="premiumTitle">Unlock FAINTR VIP</h2>
+  <p>Unlock Anti-Meta, Pokémon storage, saved teams, battle logging, your upgrade planner, and team-change alerts.</p>
+  <p class="note" id="premiumMembership"></p>
+  <div class="premiumplans" id="premiumPlans">
+    <div class="premiumplan"><h3>Monthly</h3><p class="premiumprice">$3.99 <small>USD / month</small></p><p class="note">Renews monthly. Cancel anytime in Manage billing; access continues until the paid period ends.</p><button type="button" class="btn primary" data-plan="monthly">Choose monthly</button></div>
+    <div class="premiumplan"><h3>One-time</h3><p class="premiumprice">$10 <small>USD once</small></p><p class="note">Unlock these features for this account for as long as FAINTR offers them. No recurring charge.</p><button type="button" class="btn primary" data-plan="lifetime">Choose one-time</button></div>
+  </div>
+  <p class="note" id="premiumNotice">Both options include every VIP feature. Payment is handled securely by Stripe. Sign in to attach your purchase to the right account.</p>
+  <div class="actions"><button class="btn" type="button" id="premiumDetails">Explore VIP</button><button class="btn" type="button" id="premiumManage" hidden>Manage billing</button><button class="btn" type="button" id="premiumRefresh">Refresh access</button><button class="btn quiet" type="button" id="premiumClose">Close</button></div>
+  <p class="note" id="premiumStatus" role="status" aria-live="polite"></p>
 </dialog>
 
 <div class="loader" id="loader" hidden><div class="panel"><b id="loaderTitle">Loading FAINTR</b><progress id="loaderProg" max="1" value="0"></progress><span class="note" id="loaderNote">Starting the battle engine</span></div></div>

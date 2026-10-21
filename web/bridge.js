@@ -5,10 +5,12 @@
    - Sign in / sign up, bug reports and the admin "update data now" button. */
 (function () {
   const CFG = window.FAINTR_CONFIG || {};
+  // Pure account tools are bundled into the bridge by the site builder.
+  const VIP = window.FAINTR_VIP_TOOLS;
   const LS = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } } };
   const listeners = new Set();
-  const state = { manifest: null, worker: null, user: null, profile: null, sb: null, doc: null, progress: null };
+  const state = { manifest: null, worker: null, user: null, profile: null, sb: null, doc: null, progress: null, membership: { active: false } };
   const emit = (reason) => listeners.forEach((fn) => { try { fn(state, reason); } catch (e) { /* ignore */ } });
 
   // ---------- Supabase (optional until configured)
@@ -47,34 +49,41 @@
   const cacheKey = () => `faintr.cloud.${state.user.id}`;
   const cloud = {
     async load(fresh) {
+      const userId = state.user.id;
       if (state.doc && !fresh) return state.doc;
       const cached = LS.get(cacheKey(), null);
-      const head = await state.sb.from('user_storage').select('version').eq('user_id', state.user.id).maybeSingle();
+      const head = await state.sb.from('user_storage').select('version').eq('user_id', userId).maybeSingle();
+      if (state.user?.id !== userId) throw new Error('Your account changed. Please try again.');
       if (head.error) throw new Error(`Couldn't load your account data: ${head.error.message}`);
       if (!head.data) {
         const ins = await state.sb.from('user_storage').insert({ user_id: state.user.id, roster: [], teams: [], version: 1 });
         if (ins.error && ins.error.code !== '23505') throw new Error(`Couldn't set up your account storage: ${ins.error.message}`);
+        if (state.user?.id !== userId) throw new Error('Your account changed. Please try again.');
         if (ins.error) return cloud.load(true); // made by another tab a moment ago
-        state.doc = { roster: [], teams: [], version: 1 };
-      } else if (cached && cached.version === head.data.version) {
+        state.doc = { roster: [], teams: [], battles: [], vip_settings: {}, version: 1 };
+      } else if (cached && Array.isArray(cached.battles) && cached.vip_settings && cached.version === head.data.version) {
         state.doc = cached;
       } else {
-        const full = await state.sb.from('user_storage').select('roster, teams, version').eq('user_id', state.user.id).single();
+        const full = await state.sb.from('user_storage').select('roster, teams, battles, vip_settings, version').eq('user_id', state.user.id).single();
         if (full.error) throw new Error(`Couldn't load your account data: ${full.error.message}`);
-        state.doc = { roster: full.data.roster || [], teams: full.data.teams || [], version: full.data.version };
+        if (state.user?.id !== userId) throw new Error('Your account changed. Please try again.');
+        state.doc = { roster: full.data.roster || [], teams: full.data.teams || [], battles: full.data.battles || [], vip_settings: full.data.vip_settings || {}, version: full.data.version };
       }
       LS.set(cacheKey(), state.doc);
       return state.doc;
     },
     async change(fn) {
+      const userId = state.user.id;
       for (let attempt = 0; attempt < 4; attempt++) {
         const doc = await cloud.load(attempt > 0);
-        const next = { roster: doc.roster.slice(), teams: doc.teams.slice() };
+        if (state.user?.id !== userId) throw new Error('Your account changed. Please try again.');
+        const next = { roster: doc.roster.slice(), teams: doc.teams.slice(), battles: (doc.battles || []).slice(), vip_settings: { ...(doc.vip_settings || {}) } };
         const result = fn(next);
         const size = JSON.stringify(next).length;
         if (size > 3000000) throw new Error('Your account storage is full (about 3 MB). Remove some Pokémon or teams.');
-        const r = await state.sb.from('user_storage').update({ roster: next.roster, teams: next.teams, version: doc.version + 1, updated_at: new Date().toISOString() })
-          .eq('user_id', state.user.id).eq('version', doc.version).select('version');
+        const r = await state.sb.from('user_storage').update({ ...next, version: doc.version + 1, updated_at: new Date().toISOString() })
+          .eq('user_id', userId).eq('version', doc.version).select('version');
+        if (state.user?.id !== userId) throw new Error('Your account changed. Please reload.');
         if (r.error) throw new Error(`Couldn't save: ${r.error.message}`);
         if (r.data && r.data.length) {
           state.doc = { ...next, version: r.data[0].version };
@@ -94,7 +103,50 @@
     savedUpsertMany: (list) => cloud.change((d) => { for (const t of list) { const i = d.teams.findIndex((x) => x.id === t.id); if (i >= 0) d.teams[i] = t; else d.teams.push(t); } }),
     savedRemove: (id) => cloud.change((d) => { d.teams = d.teams.filter((x) => x.id !== id); }),
   };
-  const store = () => (state.user ? cloud : local);
+  const billing = {
+    enabled: CFG.billingEnabled === true,
+    hasAccess: () => !billing.enabled || !!(state.user && state.membership.active && (state.membership.plan === 'lifetime' || Date.parse(state.membership.expiresAt) > Date.now())),
+    async refresh() {
+      const userId = state.user?.id;
+      if (!userId || !billing.enabled) { state.membership = { active: false }; return state.membership; }
+      const { data, error } = await state.sb.rpc('membership_status');
+      if (error) throw new Error('Could not check membership. Please try again.');
+      if (state.user?.id === userId) {
+        const changed = JSON.stringify(state.membership) !== JSON.stringify(data || { active: false });
+        state.membership = data || { active: false };
+        if (changed) emit('membership');
+      }
+      return state.membership;
+    },
+    async call(body) {
+      if (!state.user) throw new Error('Sign in before choosing a plan.');
+      const { data, error } = await state.sb.functions.invoke('billing', { body });
+      if (error) { let message = 'Billing is temporarily unavailable.'; try { message = (await error.context.json()).error || message; } catch (_) {} throw new Error(message); }
+      return data;
+    },
+    async checkout(plan) { const result = await billing.call({ action: 'checkout', plan }); location.assign(result.url); },
+    async portal() { const result = await billing.call({ action: 'portal' }); location.assign(result.url); },
+    async exportData() {
+      if (!state.user) throw new Error('Sign in to download your data.');
+      const { data, error } = await state.sb.rpc('export_my_storage');
+      if (error) throw new Error('Could not download your data.');
+      return data;
+    },
+  };
+  const requirePremium = () => { if (!billing.hasAccess()) { const e = new Error('FAINTR VIP unlocks Anti-Meta, Pokémon storage and saved teams.'); e.code = 402; throw e; } };
+  const store = () => {
+    const source = state.user ? cloud : local;
+    return new Proxy(source, { get(target, name) { const fn = target[name]; return typeof fn === 'function' ? (...args) => { requirePremium(); return fn(...args); } : fn; } });
+  };
+  async function premiumAnti(format) {
+    if (!billing.enabled) return null;
+    requirePremium();
+    const { data } = await state.sb.auth.getSession();
+    if (!data.session) throw new Error('Sign in again.');
+    const response = await fetch('/api/premium/antimeta?f=' + encodeURIComponent(format), { headers: { Authorization: `Bearer ${data.session.access_token}` }, cache: 'no-store' });
+    if (!response.ok) throw new Error('Could not load Anti-Meta. Check your membership and try again.');
+    return response.json();
+  }
 
   // ---------- core worker
   let reqId = 0;
@@ -113,7 +165,7 @@
       if (m.type === 'fatal') return readyReject(new Error(m.error));
       if (m.type === 'progress') { state.progress = m; emit('progress'); return; }
       if (m.type === 'storage') {
-        try { const result = await store()[m.op](...m.args); w.postMessage({ type: 'storage-reply', id: m.id, result }); }
+        try { const result = m.op === 'premiumAnti' ? await premiumAnti(...m.args) : await store()[m.op](...m.args); w.postMessage({ type: 'storage-reply', id: m.id, result }); }
         catch (err) { w.postMessage({ type: 'storage-reply', id: m.id, error: err.message }); }
         return;
       }
@@ -137,6 +189,31 @@
     await ready;
     const u = new URL(url, location.origin);
     const p = u.pathname, q = Object.fromEntries(u.searchParams), method = body === undefined ? 'GET' : 'POST';
+    if (p.startsWith('/api/vip/')) {
+      requirePremium();
+      if (!state.user) throw new Error('Sign in to use your VIP tools.');
+      if (p === '/api/vip/battles' && method === 'GET') return (await cloud.load(true)).battles || [];
+      if (p === '/api/vip/battles' && method === 'POST') return cloud.change(d => {
+        if (d.battles.length >= 2000) throw new Error('Your battle log holds 2,000 entries. Download your data before removing older entries.');
+        const entry = VIP.battleEntry(body, d.teams, state.manifest.formats); d.battles.push(entry); return entry;
+      });
+      if (p === '/api/vip/battles/delete') return cloud.change(d => { d.battles = d.battles.filter(b => b.id !== body.id); return { ok: true }; });
+      if (p === '/api/vip/alerts') {
+        await callCore('POST', '/core/regrade', {}, {});
+        const doc = await cloud.load(); return VIP.teamAlerts(doc.teams, doc.vip_settings?.seenAlerts || []);
+      }
+      if (p === '/api/vip/alerts/read') return cloud.change(d => {
+        const allowed = new Set(VIP.teamAlerts(d.teams).map(a => a.token));
+        d.vip_settings.seenAlerts = [...new Set([...(d.vip_settings.seenAlerts || []), ...(body.tokens || []).filter(t => allowed.has(t))])].slice(-1000);
+        return { ok: true };
+      });
+    }
+    if (p === '/api/query' && body?.mode === 'anti') requirePremium();
+    if (/^\/api\/(roster|saved)(\/|$)/.test(p)) {
+      // Empty lists let free browsing start without loading private account data.
+      if (!billing.hasAccess() && method === 'GET' && (p === '/api/roster' || p === '/api/saved')) return [];
+      requirePremium();
+    }
     // Website-only answers
     if (p === '/api/status') {
       return { update: { running: false, stage: 'idle', message: '' }, builds: {}, settings: { autoUpdate: true, lastCheck: null },
@@ -172,6 +249,8 @@
     state.user = session ? session.user : null;
     state.doc = null;
     if ((state.user && state.user.id) !== was) {
+      state.membership = { active: false };
+      await billing.refresh().catch(() => {});
       await loadProfile().catch(() => {});
       emit('auth');
     }
@@ -197,6 +276,7 @@
     // What's saved in this browser from before signing in
     localCounts: () => ({ roster: LS.get(KEY_R, []).length, saved: LS.get(KEY_S, []).length }),
     async moveLocalToAccount() {
+      requirePremium();
       const r = LS.get(KEY_R, []), t = LS.get(KEY_S, []);
       await cloud.change((d) => {
         const haveR = new Set(d.roster.map((e) => e.uid)), haveT = new Set(d.teams.map((x) => x.id));
@@ -206,8 +286,11 @@
       return { roster: r.length, saved: t.length };
     },
     async deleteAccount() {
-      const { error } = await state.sb.rpc('delete_my_account');
-      if (error) throw new Error(`Couldn't delete the account: ${error.message}`);
+      if (billing.enabled) await billing.call({ action: 'delete-account' });
+      else {
+        const { error } = await state.sb.rpc('delete_my_account');
+        if (error) throw new Error(`Couldn't delete the account: ${error.message}`);
+      }
       try { localStorage.removeItem(cacheKey()); } catch (e) { /* ignore */ }
       await state.sb.auth.signOut().catch(() => {});
     },
@@ -259,7 +342,7 @@
     if (error) throw new Error(error.message);
   }
 
-  window.FAINTR_BRIDGE = { api, ready, auth, state, onChange: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, webInfo, setBugStatus, config: CFG };
+  window.FAINTR_BRIDGE = { api, ready, auth, billing, state, onChange: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, webInfo, setBugStatus, config: CFG };
 
   (async () => {
     try {
@@ -267,8 +350,8 @@
         const { data } = await state.sb.auth.getSession();
         await onAuth(data.session);
         state.sb.auth.onAuthStateChange((event, session) => {
-          onAuth(session);
-          if (event === 'PASSWORD_RECOVERY') emit('password-recovery');
+          // Run requests after Supabase releases its auth callback lock.
+          setTimeout(async () => { await onAuth(session); if (event === 'PASSWORD_RECOVERY') emit('password-recovery'); }, 0);
         });
       }
       await startWorker();

@@ -1,3 +1,11 @@
 # Only the settings FAINTR needs; everything else uses Supabase's defaults.
 [functions.trigger-update]
 verify_jwt = true
+
+[functions.billing]
+# Validates the user's JWT with auth.getUser inside the handler (supports signing-key JWTs).
+verify_jwt = false
+
+[functions.stripe-webhook]
+# Stripe's timestamped HMAC is verified against the raw request before processing.
+verify_jwt = false

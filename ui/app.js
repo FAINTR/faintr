@@ -22,12 +22,15 @@ const title = () => (S.fmt ? S.fmt.title : 'Great League');
 
 const WEB = !!window.FAINTR_BRIDGE; // the website runs the engine in the browser; the desktop app has a local server
 const CFG = window.FAINTR_CONFIG || {};
+const PREMIUM = WEB && window.FAINTR_BRIDGE.billing.enabled;
+function hasPremium() { return !PREMIUM || window.FAINTR_BRIDGE.billing.hasAccess(); }
+function needPremium() { if (hasPremium()) return false; openPremium(); return true; }
 async function api(path, body, opts = {}) {
   let url = path;
   if (body === undefined) { if (!opts.noF) url += (path.includes('?') ? '&' : '?') + 'f=' + encodeURIComponent(S.f); }
   else if (body && typeof body === 'object' && !Array.isArray(body) && body.f === undefined && !opts.noF) body = { ...body, f: S.f };
   if (WEB) {
-    try { return await window.FAINTR_BRIDGE.api(url, body); } catch (e) { const err = new Error(e.message || 'Something went wrong.'); err.needsBuild = e.code === 409; throw err; }
+    try { return await window.FAINTR_BRIDGE.api(url, body); } catch (e) { if (e.code === 402) openPremium(); const err = new Error(e.message || 'Something went wrong.'); err.needsBuild = e.code === 409; throw err; }
   }
   const r = await fetch(url, body !== undefined ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
   const j = await r.json().catch(() => ({ error: "FAINTR isn't answering. Is its window still open?" }));
@@ -152,6 +155,7 @@ function syncLedes() {
     : `Every ${t} team from PvPoke's top 150, graded and ranked. Tell us what matters and what you own, and we'll sort the rest.`;
 }
 $('#antiBtn').addEventListener('click', () => {
+  if (needPremium()) return;
   if (!S.fmt || !S.fmt.anti) { showToast(`${title()} isn't set up yet. Open Teams to set it up, then try Anti-Meta.`); return; }
   S.anti = !S.anti; store.set('faintr.anti', S.anti ? '1' : '');
   renderFormatBar(); S.limit = 50; if (!$('#view-find').classList.contains('on')) showView('find'); runQuery();
@@ -516,6 +520,7 @@ async function runGrade() {
   $('#gradeBtn').disabled = false;
 }
 $('#saveBtn').addEventListener('click', async () => {
+  if (needPremium()) return;
   if (!lastReport) return;
   const name = prompt('Name this team', lastReport.members.map((m) => m.name.replace(/\s*\(.*\)/, '')).join(' / '));
   if (name === null) return;
@@ -1445,6 +1450,126 @@ $('#bugList').addEventListener('click', async (e) => {
 
 // Accounts (website only)
 const AUTH = { mode: 'in' };
+const VIPUI = { battles: [], teams: [], alerts: [], seq: 0 };
+function winText(value) { return value == null ? '—' : `${value.toFixed(1)}%`; }
+function renderBattleLog() {
+  const cup = $('#battleLogCupFilter').value, team = $('#battleLogTeamFilter').value;
+  const entries = VIPUI.battles.filter(b => (!cup || b.format === cup) && (!team || b.teamId === team));
+  const stats = window.FAINTR_VIP_TOOLS.battleStats(entries);
+  const trend = stats.trend.slice(-40), points = trend.map((p, i) => `${40 + i / Math.max(1, trend.length - 1) * 560},${125 - (p.winRate || 0)}`).join(' ');
+  $('#battleLogStats').innerHTML = `<div class="vipstatrow"><div><strong>${stats.count}</strong><span>Battles logged</span></div><div><strong>${stats.wins}–${stats.losses}–${stats.draws}</strong><span>Wins · losses · draws</span></div><div><strong>${winText(stats.winRate)}</strong><span>Win rate · draws excluded</span></div></div>${trend.length ? `<svg class="viptrend" viewBox="0 0 620 155" role="img" aria-label="Rolling win rate for up to the last 20 logged battles, from oldest to newest"><title>Rolling win rate. Most recent: ${winText(trend.at(-1).winRate)}</title><path d="M40 25H600 M40 75H600 M40 125H600" stroke="currentColor" opacity=".15"/><text x="0" y="29">100%</text><text x="7" y="79">50%</text><text x="15" y="129">0%</text><polyline points="${points}" stroke="#F5B800" stroke-width="3" fill="none"/><text x="40" y="150">Older</text><text x="550" y="150">Newer</text></svg>` : ''}
+    ${stats.byTeam.length ? `<div class="scroll"><table class="t"><caption>Results by team and cup</caption><thead><tr><th>Team</th><th>Cup</th><th>Battles</th><th>Win rate</th></tr></thead><tbody>${stats.byTeam.map(g => `<tr><td>${esc(g.name)}</td><td>${esc(g.format)}</td><td>${g.count}</td><td>${winText(g.winRate)}</td></tr>`).join('')}</tbody></table></div><div class="scroll"><table class="t"><caption>Results by cup</caption><thead><tr><th>Cup</th><th>Battles</th><th>Win rate</th></tr></thead><tbody>${stats.byCup.map(g=>`<tr><td>${esc(g.format)}</td><td>${g.count}</td><td>${winText(g.winRate)}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
+  $('#battleLogEntries').innerHTML = entries.length ? `<table class="t"><caption>Latest battles · showing up to 100</caption><thead><tr><th>Played</th><th>Team / cup</th><th>Result</th><th>Notes</th><th></th></tr></thead><tbody>${entries.slice().sort((a,b)=>b.at.localeCompare(a.at)).slice(0,100).map(b=>`<tr><td>${esc(new Date(b.at).toLocaleString())}</td><td>${esc(b.teamName)}<div class="note">${esc(b.formatTitle)}</div></td><td>${esc(b.result[0].toUpperCase()+b.result.slice(1))}</td><td class="battlelogtext">${esc(b.notes)}</td><td><button class="btn quiet small" type="button" data-remove-battle="${esc(b.id)}">Remove</button></td></tr>`).join('')}</tbody></table>` : '<p class="empty">No battles logged here yet. Save a team, then record your first result above.</p>';
+}
+function renderVipAlerts() {
+  const unread = VIPUI.alerts.filter(a => !a.read).length;
+  $('#vipAlertCount').textContent = unread ? `(${unread})` : '';
+  $('#vipTab').textContent = unread ? `VIP · ${unread}` : 'VIP';
+  $('#vipAlertList').innerHTML = VIPUI.alerts.length ? VIPUI.alerts.map(a => `<article class="vipalert ${a.read ? '' : 'unread'}"><h3>${esc(a.name)} <span class="fmtchip">${esc(S.info.formats.find(f=>f.key===a.format)?.title || a.format)}</span></h3><p>Overall score ${a.delta >= 0 ? '+' : ''}${a.delta.toFixed(1)} since the previous data version.</p><p class="note">${a.changes.map(c=>`${esc(G[c.key]?.label || c.key)}: ${esc(c.from)} → ${esc(c.to)}`).join(' · ') || 'The overall score changed; letter grades stayed the same.'}</p><p class="note">${esc(fmtVersion(a.from))} → ${esc(fmtVersion(a.to))}${a.read ? ' · Read' : ' · New'}</p><button class="btn small" type="button" data-goto="saved">Review My Teams</button></article>`).join('') : '<p class="empty">No changes to report. Save teams in My Teams; their grade changes will appear here after a data update.</p>';
+}
+async function loadVip() {
+  if (!PREMIUM || !hasPremium()) return;
+  const seq = ++VIPUI.seq;
+  $('#battleLogStatus').textContent = 'Loading your VIP tools…';
+  try {
+    const [battles, teams, alerts] = await Promise.all([api('/api/vip/battles', undefined, {noF:true}), api('/api/saved',undefined,{noF:true}), api('/api/vip/alerts',undefined,{noF:true})]);
+    if (seq !== VIPUI.seq || !hasPremium()) return;
+    VIPUI.battles = battles; VIPUI.teams = teams; VIPUI.alerts = alerts;
+    const selected = $('#battleLogTeam').value;
+    $('#battleLogTeam').innerHTML = teams.length ? teams.map(t=>`<option value="${esc(t.id)}">${esc(t.name)} · ${esc(t.title || t.f)}</option>`).join('') : '<option value="">Save a team in My Teams first</option>';
+    if (teams.some(t=>t.id===selected)) $('#battleLogTeam').value = selected;
+    const cupFilter = $('#battleLogCupFilter').value, teamFilter = $('#battleLogTeamFilter').value;
+    $('#battleLogCupFilter').innerHTML = '<option value="">All cups</option>' + [...new Map(battles.map(b=>[b.format,b.formatTitle]))].map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');
+    $('#battleLogTeamFilter').innerHTML = '<option value="">All teams</option>' + [...new Map(battles.map(b=>[b.teamId,b.teamName]))].map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');
+    if (battles.some(b=>b.format===cupFilter)) $('#battleLogCupFilter').value = cupFilter;
+    if (battles.some(b=>b.teamId===teamFilter)) $('#battleLogTeamFilter').value = teamFilter;
+    if (!$('#battleLogDate').value) $('#battleLogDate').value = new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);
+    $('#battleLogForm button').disabled = !teams.length;
+    renderBattleLog(); renderVipAlerts(); $('#battleLogStatus').textContent = '';
+  } catch (err) { if (seq === VIPUI.seq) $('#battleLogStatus').textContent = err.message; }
+}
+function syncPremium() {
+  if (!PREMIUM) return;
+  const B = window.FAINTR_BRIDGE, member = B.state.membership, paid = hasPremium();
+  $('#premiumBtn').hidden = false;
+  $('#premiumBtn').textContent = paid ? 'VIP active' : 'Get VIP';
+  $('#vipTab').hidden = false;
+  $('#premiumPlans').hidden = paid;
+  $('#premiumManage').hidden = !B.state.user;
+  $('#premiumRefresh').hidden = !B.state.user;
+  $('#authBilling').hidden = false; $('#authExport').hidden = false;
+  $('#authIntro').textContent = 'Sign in to purchase VIP access and use Anti-Meta, Pokémon storage and saved teams across your devices. Team search, grading, matchups and IV tools are free.';
+  $('#premiumMembership').textContent = paid ? (member.plan === 'lifetime' ? 'Your one-time purchase is active.' : `${member.cancelAtPeriodEnd ? 'Your membership ends' : 'Your next renewal is'} ${new Date(member.expiresAt).toLocaleDateString()}.`) : 'Choose either option to unlock every VIP feature.';
+  $('#premiumNotice').hidden = paid;
+  $('#vipMembership').textContent = paid ? $('#premiumMembership').textContent : '';
+  $('#vipPlanCards').hidden = paid;
+  $('#vipManage').hidden = !B.state.user; $('#vipRefresh').hidden = !B.state.user;
+  $('#vipHero').hidden = paid; $('#vipBenefits').hidden = paid; $('#vipPlans').hidden = paid; $('#vipDashboard').hidden = !paid;
+  if (!paid && S.anti) { S.anti = false; store.set('faintr.anti', ''); if (S.fmt) renderFormatBar(); }
+}
+function openPremium() {
+  if (!PREMIUM) return;
+  syncPremium(); $('#premiumStatus').textContent = '';
+  if (!$('#premiumDlg').open) $('#premiumDlg').showModal();
+}
+if (PREMIUM) {
+  $('#battleLogRefresh').addEventListener('click', loadVip);
+  $('#battleLogCupFilter').addEventListener('change', renderBattleLog); $('#battleLogTeamFilter').addEventListener('change', renderBattleLog);
+  $('#battleLogForm').addEventListener('submit', async e => {
+    e.preventDefault(); if (needPremium()) return;
+    const team = VIPUI.teams.find(t=>t.id===$('#battleLogTeam').value);
+    if (!team) { $('#battleLogStatus').textContent = 'Save a team in My Teams first.'; return; }
+    const button = $('#battleLogForm button'); button.disabled = true;
+    try { await api('/api/vip/battles',{teamId:team.id,format:team.f,result:$('#battleLogResult').value,at:new Date($('#battleLogDate').value).toISOString(),notes:$('#battleLogNotes').value},{noF:true}); $('#battleLogNotes').value=''; $('#battleLogDate').value=''; await loadVip(); showToast('Battle logged.'); } catch(err) { $('#battleLogStatus').textContent=err.message; } finally { button.disabled = false; }
+  });
+  $('#battleLogEntries').addEventListener('click',async e => {
+    const button=e.target.closest('[data-remove-battle]'); if (!button) return;
+    if (button.dataset.confirm !== 'yes') { button.dataset.confirm='yes'; button.textContent='Confirm removal'; return; }
+    try { await api('/api/vip/battles/delete',{id:button.dataset.removeBattle},{noF:true}); await loadVip(); } catch(err) { $('#battleLogStatus').textContent=err.message; }
+  });
+  $('#vipAlertsRead').addEventListener('click',async () => {
+    try { await api('/api/vip/alerts/read',{tokens:VIPUI.alerts.map(a=>a.token)},{noF:true}); VIPUI.alerts.forEach(a=>a.read=true); renderVipAlerts(); } catch(err) { $('#vipStatus').textContent=err.message; }
+  });
+  $('#vipUpgradeRun').addEventListener('click',async () => {
+    if (needPremium()) return;
+    const button=$('#vipUpgradeRun'); button.disabled=true; $('#vipUpgradeResults').innerHTML='<p class="note"><span class="spin"></span> Comparing your next builds…</p>';
+    try {
+      const data=await api('/api/vip/upgrades');
+      $('#vipUpgradeIntro').textContent=`Your next builds for ${data.format}. ${data.readyCount} eligible Pokémon in the candidate pool have current CP marked ready.`;
+      $('#vipUpgradeResults').innerHTML=data.suggestions.length ? `<p class="note">${data.baseline ? `Best team from your ready Pokémon: ${data.baseline.composite.toFixed(1)} overall.` : 'Add current CP for your Pokémon to establish a ready-team baseline.'} Team-score comparisons use the ranked pool’s standard IVs and moves. Check your actual build in Team Grader before spending Stardust, Candy or TMs.</p><div class="vipupgrades">${data.suggestions.map(c=>`<article class="vipupgrade"><span class="vipbadge subtle">${esc(c.action)}</span><h3>${esc(c.name)}</h3><p class="note">From ${esc(c.sourceName)} · IV rank ${fmt(c.ivRank)} · ${fmt(c.pctOfBest,1)}% of best stat product</p><p>Target: level ${c.level}, CP ${fmt(c.targetCp)}${c.needsXL ? ' · XL Candy needed' : ''}</p><p class="note">Recommended moves: ${esc(c.moves.join(', '))}</p>${c.improvement != null && c.improvement > .05 ? `<p class="vipgain">+${c.improvement.toFixed(1)} potential team score</p>` : c.team && !data.baseline ? '<p class="vipgain">Opens a complete team with your ready Pokémon</p>' : '<p class="note">Review this build for more roster options.</p>'}${c.team ? `<p class="note">Possible team: ${c.team.members.map(m=>esc(m.name)).join(' · ')}</p><button class="btn small" type="button" data-upgrade-team="${c.team.members.map(m=>esc(m.id)).join(',')}">Try team in grader</button>` : ''}</article>`).join('')}</div>` : '<p class="empty">No new builds found in this cup’s top candidate pool. Add more Pokémon or their current CP to your Roster, or select another cup.</p>';
+    } catch(err) { $('#vipUpgradeResults').textContent=err.message; } finally { button.disabled=false; }
+  });
+  $('#vipUpgradeResults').addEventListener('click', e => { const button=e.target.closest('[data-upgrade-team]'); if (!button) return; loadIntoGrader(button.dataset.upgradeTeam.split(',').map(id=>({id}))); showView('grade'); runGrade(); });
+  $('#premiumBtn').addEventListener('click', () => showView('vip'));
+  $('#premiumDetails').addEventListener('click', () => { $('#premiumDlg').close(); showView('vip'); });
+  $('#premiumClose').addEventListener('click', () => $('#premiumDlg').close());
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-plan]'); if (!btn) return;
+    if (!window.FAINTR_BRIDGE.state.user) { $('#premiumDlg').close(); AUTH.returnToPremium = true; setAuthMode('in'); openAuth(); return; }
+    const buttons = $$('[data-plan]'); buttons.forEach(b => b.disabled = true);
+    const status = btn.closest('#view-vip') ? $('#vipStatus') : $('#premiumStatus');
+    status.textContent = 'Opening secure checkout…';
+    try { await window.FAINTR_BRIDGE.billing.checkout(btn.dataset.plan); } catch (err) { status.textContent = err.message; buttons.forEach(b => b.disabled = false); }
+  });
+  $('#premiumManage').addEventListener('click', async () => {
+    $('#premiumStatus').textContent = 'Opening billing…';
+    try { await window.FAINTR_BRIDGE.billing.portal(); } catch (err) { $('#premiumStatus').textContent = err.message; }
+  });
+  $('#premiumRefresh').addEventListener('click', async () => {
+    try { await window.FAINTR_BRIDGE.billing.refresh(); if (hasPremium()) location.reload(); else $('#premiumStatus').textContent = 'No active membership found yet. If payment just completed, wait a moment and refresh again.'; } catch (err) { $('#premiumStatus').textContent = err.message; }
+  });
+  $('#vipManage').addEventListener('click', async () => { try { await window.FAINTR_BRIDGE.billing.portal(); } catch (err) { $('#vipStatus').textContent = err.message; } });
+  $('#vipRefresh').addEventListener('click', async () => { try { await window.FAINTR_BRIDGE.billing.refresh(); if (hasPremium()) location.reload(); else $('#vipStatus').textContent = 'No active membership found yet.'; } catch (err) { $('#vipStatus').textContent = err.message; } });
+  $('#authBilling').addEventListener('click', () => { $('#authDlg').close(); openPremium(); });
+  $('#authExport').addEventListener('click', async () => {
+    try {
+      const data = await window.FAINTR_BRIDGE.billing.exportData();
+      const url = URL.createObjectURL(new Blob([JSON.stringify({ app: 'FAINTR', exported: new Date().toISOString(), ...data }, null, 2)], { type: 'application/json' }));
+      const a = document.createElement('a'); a.href = url; a.download = 'faintr-account-data.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) { $('#authStatus2').textContent = err.message; }
+  });
+  window.addEventListener('focus', () => window.FAINTR_BRIDGE.billing.refresh().catch(() => {}));
+}
 function syncAccount() {
   if (!WEB) return;
   const B = window.FAINTR_BRIDGE, btn = $('#accountBtn');
@@ -1458,6 +1583,7 @@ function syncAccount() {
   const gate = B.webInfo().rosterNeedsAccount;
   $('#rGate').hidden = !gate; $('#view-roster').classList.toggle('gated', gate);
   $('#rWhere').textContent = 'saved to your account';
+  syncPremium();
 }
 function setAuthMode(m) {
   AUTH.mode = m;
@@ -1525,15 +1651,25 @@ if (WEB) {
   // Signing in or out swaps which Roster and teams are shown
   window.FAINTR_BRIDGE.onChange(async (st, reason) => {
     if (reason === 'password-recovery') { syncAccount(); openAuth(); $('#authNewPass').hidden = false; return; }
+    if (reason === 'membership') {
+      syncPremium();
+      if (S.booted) { await api('/core/membership', {}, { noF: true }); await loadRoster(); await setFormat(S.f, true); }
+      return;
+    }
     if (reason !== 'auth') return;
+    VIPUI.seq++; VIPUI.battles=[]; VIPUI.teams=[]; VIPUI.alerts=[];
+    if (PREMIUM) { $('#battleLogStats').replaceChildren(); $('#battleLogEntries').replaceChildren(); $('#vipAlertList').replaceChildren(); $('#vipUpgradeResults').textContent='Find your next build for the selected cup.'; $('#savedList').replaceChildren(); }
     syncAccount();
     if (!S.info) return;
+    if (PREMIUM) { await api('/core/membership', {}, { noF: true }); await setFormat(S.f, true); }
+    if (PREMIUM && $('#view-vip').classList.contains('on')) loadVip();
     await loadRoster().catch(() => {});
     if ($('#view-saved').classList.contains('on')) loadSaved();
     if ($('#view-bugs').classList.contains('on')) loadBugs();
     pollStatus();
     const c = window.FAINTR_BRIDGE.auth.localCounts();
-    if (st.user && c.saved && !AUTH.offered) { AUTH.offered = true; showToast(`You have ${c.saved} saved team${c.saved === 1 ? '' : 's'} in this browser.`, { label: 'Add to my account', run: async () => { await window.FAINTR_BRIDGE.auth.moveLocalToAccount(); if ($('#view-saved').classList.contains('on')) loadSaved(); showToast('Added to your account.'); } }); }
+    if (AUTH.returnToPremium && st.user) { AUTH.returnToPremium = false; $('#authDlg').close(); openPremium(); }
+    if (st.user && c.saved && hasPremium() && !AUTH.offered) { AUTH.offered = true; showToast(`You have ${c.saved} saved team${c.saved === 1 ? '' : 's'} in this browser.`, { label: 'Add to my account', run: async () => { await window.FAINTR_BRIDGE.auth.moveLocalToAccount(); if ($('#view-saved').classList.contains('on')) loadSaved(); showToast('Added to your account.'); } }); }
   });
 }
 // Loading screen while the website starts its engine and downloads team data
@@ -1546,6 +1682,7 @@ function showLoader(title, loaded, total) {
 
 /* ======================= tabs + boot ======================= */
 function showView(name) {
+  if (['roster', 'saved'].includes(name) && needPremium()) return;
   const cur = $$('nav.tabs button[aria-selected="true"]')[0];
   if (cur && cur.dataset.view !== 'bugs') S.lastView = cur.textContent;
   if (name === 'bugs') loadBugs();
@@ -1555,6 +1692,7 @@ function showView(name) {
   if (name === 'saved') loadSaved();
   if (name === 'news') loadNews();
   if (name === 'roster') renderRoster();
+  if (name === 'vip') { syncPremium(); loadVip(); }
   if (name === 'ivs') { renderIvLeague(); if (!IVS.p) { const id = store.get('faintr.ivspecies'); if (id) fullCatalog().then((f) => { const p = f.find((c) => c.id === id); if (p && !IVS.p) setIvSpecies(p); }); } }
   window.scrollTo({ top: 0 });
 }
@@ -1594,11 +1732,25 @@ async function loadInfo() {
   picker($('#pk-roster'), (p) => rfSetSpecies(p), fullSource);
   picker($('#pk-iv'), (p) => setIvSpecies(p), fullSource);
   renderIvLeague();
-  S.anti = store.get('faintr.anti') === '1';
+  S.anti = hasPremium() && store.get('faintr.anti') === '1';
   fullCatalog().catch(() => {});
   await loadRoster();
   await setFormat(S.f, true);
   S.booted = true;
-  if (WEB) { $('#loader').hidden = true; api('/core/regrade', {}, { noF: true }).catch(() => {}); api('/core/refresh-roster', {}, { noF: true }).then(() => loadRoster()).catch(() => {}); }
+  if (WEB) { $('#loader').hidden = true; api('/core/regrade', {}, { noF: true }).then(async () => {
+    if (PREMIUM && hasPremium()) { VIPUI.alerts=await api('/api/vip/alerts',undefined,{noF:true}); renderVipAlerts(); const count=VIPUI.alerts.filter(a=>!a.read).length; if (count) showToast(`${count} saved team${count===1?' has':'s have'} changed.`,{label:'View alerts',run:()=>showView('vip')}); }
+  }).catch(() => {}); api('/core/refresh-roster', {}, { noF: true }).then(() => loadRoster()).catch(() => {}); }
+  if (PREMIUM) {
+    const params = new URLSearchParams(location.search);
+    if (params.get('checkout') === 'success') {
+      openPremium(); $('#premiumStatus').textContent = 'Confirming your payment…';
+      try {
+        await window.FAINTR_BRIDGE.billing.call({ action: 'confirm', sessionId: params.get('session_id') });
+        await window.FAINTR_BRIDGE.billing.refresh();
+        if (hasPremium()) { history.replaceState(null, '', location.pathname); location.reload(); return; }
+        $('#premiumStatus').textContent = 'Payment is still processing. Refresh access in a moment.';
+      } catch (err) { $('#premiumStatus').textContent = err.message; }
+    } else if (params.get('checkout') === 'canceled') { openPremium(); $('#premiumStatus').textContent = 'Checkout canceled. You can choose a plan whenever you’re ready.'; history.replaceState(null, '', location.pathname); }
+  }
   pollStatus();
 })();
