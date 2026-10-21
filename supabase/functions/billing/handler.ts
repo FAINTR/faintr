@@ -12,8 +12,8 @@ export async function handleBilling(req: Request) {
   if (req.method !== 'POST') return reply({ error: 'Use POST.' }, 405);
   if (origin && !allowed.includes(origin)) return reply({ error: 'Invalid origin.' }, 403);
   const token = req.headers.get('authorization')?.replace(/^Bearer /i, '');
+  if (req.headers.get('x-faintr-readiness') === '1') return checkReadiness(req.headers.get('apikey') || token || '');
   if (!token) return reply({ error: 'Sign in first.' }, 401);
-  if (req.headers.get('x-faintr-readiness') === '1') return checkReadiness(token);
   const admin = db();
   const { data: { user }, error } = await admin.auth.getUser(token);
   if (error || !user) return reply({ error: 'Sign in first.' }, 401);
