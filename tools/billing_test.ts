@@ -20,9 +20,15 @@ Deno.test('readiness refuses account tokens before reading Stripe or the databas
 Deno.test('operator readiness verifies live prices and reports a wrong amount', async () => {
   const original = globalThis.fetch;
   Deno.env.set('STRIPE_WEBHOOK_SECRET', 'fake-webhook-test-key');
-  let amount = 399;
-  globalThis.fetch = async input => {
+  let amount = 399, writes = 0;
+  globalThis.fetch = async (input, init) => {
     const url = String(input);
+    if (init?.method === 'POST') {
+      writes++;
+      const body = new URLSearchParams(String(init.body));
+      assert(!body.has('payment_method_types') && !body.has('payment_method'));
+      return Response.json(url.endsWith('/customers') ? {id:'cus_synthetic'} : {status:'open',payment_status:'unpaid',url:'https://stripe.example/verification'});
+    }
     const data = url.includes('/prices/price_monthly') ? {active:true,livemode:true,currency:'usd',unit_amount:amount,recurring:{interval:'month'}}
       : url.includes('/prices/price_lifetime') ? {active:true,livemode:true,currency:'usd',unit_amount:1000,type:'one_time'}
       : url.includes('/webhook_endpoints') ? {data:[{url:'https://database.example/functions/v1/stripe-webhook',status:'enabled',enabled_events:['*']}]}
@@ -31,6 +37,9 @@ Deno.test('operator readiness verifies live prices and reports a wrong amount', 
   };
   try {
     assert((await (await checkReadiness('fake-test-key')).json()).ok);
+    assert(writes === 0, 'Normal checks must remain read-only');
+    assert((await (await checkReadiness('fake-test-key', true)).json()).ok);
+    assert(writes === 4, 'Probe must check customers, both checkouts and the billing portal');
     amount = 1;
     const failed = await (await checkReadiness('fake-test-key')).json();
     assert(!failed.ok && !failed.checks.monthlyPrice);
