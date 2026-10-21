@@ -243,6 +243,13 @@ function assemble(src, version, built, formats) {
   // The page: the desktop app's UI with the website bridge
   const copyDir = (from, to) => { fs.mkdirSync(to, { recursive: true }); for (const e of fs.readdirSync(from, { withFileTypes: true })) { const a = path.join(from, e.name), b = path.join(to, e.name); if (e.isDirectory()) copyDir(a, b); else fs.copyFileSync(a, b); } };
   copyDir(path.join(ROOT, 'ui'), path.join(tmp, 'static'));
+  for (const page of ['privacy', 'terms']) {
+    const source = path.join(ROOT, 'web/legal', page + '.html');
+    if (fs.existsSync(source)) {
+      fs.mkdirSync(path.join(tmp, page), { recursive: true });
+      fs.copyFileSync(source, path.join(tmp, page, 'index.html'));
+    }
+  }
   fs.rmSync(path.join(tmp, 'static/index.html'));
   // Site settings from the environment (GitHub repository variables), so nobody edits code to change a link
   const env = (k) => (process.env[k] || '').trim();

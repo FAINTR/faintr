@@ -307,10 +307,11 @@
 <footer class="legal">
   <p>FAINTR is not affiliated with, endorsed by, or sponsored by Niantic, Nintendo, Game Freak, or The Pokémon Company. Pokémon and Pokémon GO are trademarks of their respective owners.</p>
   <p>Battle simulation, game data and rankings come from <a href="https://github.com/pvpoke/pvpoke" target="_blank" rel="noopener">PvPoke</a>, used under the MIT License. FAINTR is free, and the core tools stay free.</p>
+  <p><a href="https://faintr.com/privacy/" target="_blank" rel="noopener">Privacy Policy</a> · <a href="https://faintr.com/terms/" target="_blank" rel="noopener">Terms &amp; billing</a> · <a href="mailto:skaggshood@gmail.com">Contact support</a></p>
 </footer>
 
-<dialog id="dataDlg">
-  <h2>Data and updates</h2>
+<dialog id="dataDlg" aria-labelledby="dataTitle">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:20px"><h2 id="dataTitle">Data and updates</h2><button class="btn" id="dlgClose" type="button">Close</button></div>
   <p class="note" id="dataNow"></p>
   <section id="webData" hidden>
     <p class="note">FAINTR's website updates itself every night at midnight Central time: it checks PvPoke for new rankings and moves, re-runs every matchup that changed and publishes the results. You don't need to do anything.</p>
@@ -331,7 +332,7 @@
   <section class="desk">
     <p class="note" id="updMsg">Downloads PvPoke's latest game data and rankings from GitHub, including new cups. If anything changed, FAINTR re-runs every matchup and re-scores every team on this computer. Your current data stays in place until it finishes.</p>
     <progress id="updProg" value="0" max="1" hidden></progress>
-    <div class="actions"><button class="btn primary" id="updNow" type="button">Check for updates</button><button class="btn" id="dlgClose" type="button">Close</button></div>
+    <div class="actions"><button class="btn primary" id="updNow" type="button">Check for updates</button></div>
   </section>
 </dialog>
 
@@ -388,6 +389,7 @@
     </form>
     <div class="authalt" id="authAlt" hidden><button class="btn discordbtn" type="button" id="authDiscord" hidden>Continue with Discord</button><button class="btn googlebtn" type="button" id="authGoogle" hidden>Continue with Google</button></div>
     <p class="note" id="authStatus"></p>
+    <p class="note">By creating an account or purchasing VIP, you agree to the <a href="https://faintr.com/terms/" target="_blank" rel="noopener">Terms of Use</a>. Read our <a href="https://faintr.com/privacy/" target="_blank" rel="noopener">Privacy Policy</a> to learn how your information is handled.</p>
   </div>
   <div id="authIn" hidden>
     <h2>Your account</h2>
