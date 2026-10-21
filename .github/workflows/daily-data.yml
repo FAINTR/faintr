@@ -42,7 +42,16 @@ jobs:
         id: gate
         env:
           REQ_BY: ${{ inputs.requested_by }}
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
+          if [ -z "$CF_TOKEN" ] || [ -z "$CF_ACCOUNT" ]; then
+            echo "Cloudflare settings aren't configured yet; skipping publication."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "### Setup required" >> "$GITHUB_STEP_SUMMARY"
+            echo "Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in repository secrets, then run this workflow again." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           if [ "${{ github.event_name }}" = "schedule" ]; then
             off=$(TZ=America/Chicago date +%z)
             if { [ "${{ github.event.schedule }}" = "0 5 * * *" ] && [ "$off" != "-0500" ]; } || \
@@ -121,4 +130,8 @@ jobs:
       # A free Supabase project pauses after a week with no activity; this keeps it awake
       - name: Keep Supabase awake
         if: steps.gate.outputs.skip != 'true' && vars.SUPABASE_URL != ''
-        run: curl -fsS "${{ vars.SUPABASE_URL }}/rest/v1/site_status?select=id" -H "apikey: ${{ vars.SUPABASE_ANON_KEY }}" > /dev/null || echo "Supabase didn't answer (it may be paused; open the Supabase dashboard to restore it)."
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        run: |
+          curl -fsS "$SUPABASE_URL/rest/v1/site_status?select=id" -H "apikey: $SUPABASE_ANON_KEY" > /dev/null || echo "Supabase didn't answer (it may be paused; open the Supabase dashboard to restore it)."
