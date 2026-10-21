@@ -173,13 +173,25 @@ function webTeams(dir) {
   const D = loadTeams(dir);
   const matrix = readJ(path.join(dir, 'matrix.json'));
   const anti = readJ(path.join(dir, 'antimeta.json'));
-  const bin = codec.encode(D, anti.field.length, matrix.meta.metaOpp.length);
+  // The scorer excludes opponents missing from this cup's threat list. Use the
+  // same denominators when recovering the integer counts from percentages.
+  const threats = new Set(matrix.threats.map((t) => t.id));
+  const fieldSize = anti.field.filter((team) => team.every((id) => threats.has(id))).length;
+  const metaOppLen = matrix.meta.metaOpp.filter((opponent) => threats.has(opponent.id)).length;
+  const bin = codec.encode(D, fieldSize, metaOppLen);
   const dec = codec.decode(D.info, bin, matrix.meta.metaTypes);
   let mismatch = 0;
   for (let i = 0; i < D.n * 3; i++) if (dec.members[i] !== D.members[i]) mismatch++;
   for (let i = 0; i < D.n; i++) if (dec.orders[i] !== D.orders[i]) mismatch++;
   for (let i = 0; i < D.metrics.length; i++) if (dec.metrics[i] !== D.metrics[i]) mismatch++;
-  if (mismatch) throw new Error(`${D.info.fmt.key}: compact team data doesn't match the full data (${mismatch} differences)`);
+  if (mismatch) {
+    const fields = D.info.fields.map((field, k) => {
+      let count = 0;
+      for (let i = 0; i < D.n; i++) if (dec.metrics[i * D.K + k] !== D.metrics[i * D.K + k]) count++;
+      return count ? `${field}: ${count}` : null;
+    }).filter(Boolean);
+    throw new Error(`${D.info.fmt.key}: compact team data doesn't match the full data (${mismatch} differences; ${fields.join(', ')})`);
+  }
   return { info: D.info, bin: zlib.gzipSync(bin, { level: 9 }), nTeams: D.n };
 }
 
