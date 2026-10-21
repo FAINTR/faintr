@@ -293,7 +293,7 @@ function assemble(src, version, built, formats) {
   html = html.replace('<!--WEB-HEAD-->', `<meta name="description" content="FAINTR: Pokémon GO PvP team builder, team grader, IV ranks and Anti-Meta teams, built on PvPoke's battle simulator.">
 <meta property="og:title" content="FAINTR: Win the matchup"><meta property="og:description" content="Pokémon GO PvP teams that actually win, ranked and graded on PvPoke's battle engine."><meta name="theme-color" content="#2B2F3A">`)
     .replace('<!--WEB-SCRIPTS-->', `<script src="/static/vendor/supabase.js?v=${v('static/vendor/supabase.js')}"></script>\n<script src="/static/viptools.js?v=${v('static/viptools.js')}"></script>\n<script src="/static/bridge.js?v=${v('static/bridge.js')}"></script>`)
-    .replace(/(href|src)="\/(static\/[^"?]+\.(?:css|js)|metrics\.js)"/g, (m, attr, rel) => `${attr}="/${rel}?v=${v(rel)}"`);
+    .replace(/(href|src)="\/(static\/[^"?]+\.(?:css|js|svg)|metrics\.js)"/g, (m, attr, rel) => `${attr}="/${rel}?v=${v(rel)}"`);
   fs.writeFileSync(path.join(tmp, 'index.html'), html);
   // Manifest: the only file that changes name-in-place; never cached
   const schedule = loadSchedule(path.join(ROOT, 'schedule.json'));
