@@ -31,8 +31,8 @@ export async function checkReadiness(token: string, checkoutProbe = false) {
     // Storage is tested with the authenticated trainer role in verify_paid_access.sql.
     // Billing's server credential only needs the server-owned payment tables.
     const checks: Record<string, boolean> = {
-      monthlyPrice: monthly.active && monthly.livemode && monthly.currency === 'usd' && monthly.unit_amount === 399 && monthly.recurring?.interval === 'month',
-      lifetimePrice: lifetime.active && lifetime.livemode && lifetime.currency === 'usd' && lifetime.unit_amount === 1000 && lifetime.type === 'one_time',
+      monthlyPrice: monthly.active && monthly.livemode && monthly.currency === 'usd' && monthly.unit_amount === 199 && monthly.recurring?.interval === 'month',
+      lifetimePrice: lifetime.active && lifetime.livemode && lifetime.currency === 'usd' && lifetime.unit_amount === 700 && lifetime.type === 'one_time',
       webhookEvents: !!webhook && required.every(event => webhook.enabled_events.includes(event) || webhook.enabled_events.includes('*')),
       signingSecretConfigured: !!Deno.env.get('STRIPE_WEBHOOK_SECRET'),
       billingDatabaseAccess: true,
@@ -49,7 +49,7 @@ export async function checkReadiness(token: string, checkoutProbe = false) {
           'line_items[0][price]': price(plan)!, 'line_items[0][quantity]': '1',
           'metadata[faintr_verification]': 'unpaid_checkout_probe',
           success_url: site(), cancel_url: site(), expires_at: String(probeWindow * 300 + 2160),
-        }), `faintr-readiness-${policyVersion}-${plan}-${probeWindow}`);
+        }), `faintr-readiness-${policyVersion}-${price(plan)}-${plan}-${probeWindow}`);
         checks['checkout_' + plan] = session.status === 'open' && session.payment_status === 'unpaid' && !!session.url && session.consent_collection?.terms_of_service === 'required';
       }
       stage = 'billing_portal';

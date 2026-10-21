@@ -66,7 +66,7 @@ export async function handleBilling(req: Request) {
     const prefix = body.plan === 'monthly' ? 'subscription_data' : 'payment_intent_data';
     values[`${prefix}[metadata][faintr_user]`] = user.id;
     values[`${prefix}[metadata][faintr_plan]`] = body.plan;
-    const session = await stripe('checkout/sessions', form(values), `faintr-checkout-${policyVersion}-${user.id}-${body.plan}-${Math.floor(Date.now() / 300000)}`);
+    const session = await stripe('checkout/sessions', form(values), `faintr-checkout-${policyVersion}-${price(body.plan)}-${user.id}-${body.plan}-${Math.floor(Date.now() / 300000)}`);
     return reply({ url: session.url });
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Could not start billing.';

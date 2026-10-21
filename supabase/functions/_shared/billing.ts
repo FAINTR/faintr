@@ -9,6 +9,9 @@ export const serverKey = () => {
 export const db = () => createClient(Deno.env.get('SUPABASE_URL')!, serverKey(), { auth: { persistSession: false, autoRefreshToken: false } });
 export const site = () => Deno.env.get('FAINTR_SITE_URL') || 'https://faintr.com';
 export const price = (plan: string) => Deno.env.get(plan === 'monthly' ? 'STRIPE_MONTHLY_PRICE_ID' : 'STRIPE_LIFETIME_PRICE_ID');
+// Retain fulfillment for purchases made before the October 21 price reduction.
+export const recognizedPrice = (plan: string, id: string) => [price(plan), plan === 'monthly'
+  ? 'price_1USrM5IxUUkOJYhZHjjgGRk0' : 'price_1USrPGIxUUkOJYhZkiUoYn8M'].includes(id);
 
 export async function stripe(path: string, body?: URLSearchParams, key?: string): Promise<any> {
   const secret = Deno.env.get('STRIPE_SECRET_KEY');
@@ -33,7 +36,7 @@ export async function syncSubscription(id: string) {
   const admin = db();
   const customer = await checked(await admin.from('billing_customers').select('user_id').eq('customer_id', objectId(sub.customer)).maybeSingle());
   if (!customer) return;
-  const item = sub.items.data.find((i: any) => i.price.id === price('monthly'));
+  const item = sub.items.data.find((i: any) => recognizedPrice('monthly', i.price.id));
   const expires = item?.current_period_end || sub.current_period_end;
   await checked(await admin.rpc('sync_billing_purchase', { p: { id: sub.id, user_id: customer.user_id, kind: 'monthly',
     active: !!item && ['active', 'trialing'].includes(sub.status), expires_at: expires ? new Date(expires * 1000).toISOString() : null,
@@ -55,7 +58,7 @@ export async function syncPayment(id: string) {
     disputed = disputes.data.some((d: any) => !['won', 'warning_closed'].includes(d.status));
   }
   await checked(await admin.rpc('sync_billing_purchase', { p: { id: payment.id, user_id: customer.user_id, kind: 'lifetime',
-    active: payment.status === 'succeeded' && payment.amount_received >= 1000 && payment.currency === 'usd' && !charge?.refunded && !disputed,
+    active: payment.status === 'succeeded' && payment.amount_received >= 700 && payment.currency === 'usd' && !charge?.refunded && !disputed,
     expires_at: null, synced_at } }));
 }
 
@@ -65,7 +68,7 @@ export async function syncCheckout(id: string, userId?: string) {
   const customer = await checked(await admin.from('billing_customers').select('user_id').eq('customer_id', objectId(session.customer)).maybeSingle());
   if (!customer || (userId && customer.user_id !== userId) || session.client_reference_id !== customer.user_id) throw new Error('This checkout belongs to another account.');
   const plan = session.metadata?.faintr_plan;
-  if (!['monthly', 'lifetime'].includes(plan) || !session.line_items?.data.some((i: any) => i.price.id === price(plan))) throw new Error('Unrecognized membership price.');
+  if (!['monthly', 'lifetime'].includes(plan) || !session.line_items?.data.some((i: any) => recognizedPrice(plan, i.price.id))) throw new Error('Unrecognized membership price.');
   if (session.mode === 'subscription' && session.subscription) await syncSubscription(objectId(session.subscription));
   else if (session.payment_status === 'paid' && session.payment_intent) await syncPayment(objectId(session.payment_intent));
 }
