@@ -1,5 +1,7 @@
 import { verifySignature, syncSubscription, syncPayment, syncCheckout } from '../supabase/functions/_shared/billing.ts';
 import { handleBilling } from '../supabase/functions/billing/handler.ts';
+import { checkReadiness } from '../supabase/functions/billing/readiness.ts';
+import observed from './fixtures/stripe-verification.json' with { type: 'json' };
 
 const assert = (value: unknown, message = 'Assertion failed') => { if (!value) throw new Error(message); };
 Deno.env.set('SUPABASE_URL', 'https://database.example');
@@ -7,6 +9,54 @@ Deno.env.set('SUPABASE_SERVICE_ROLE_KEY', 'fake-test-key');
 Deno.env.set('STRIPE_SECRET_KEY', 'fake-stripe-test-key');
 Deno.env.set('STRIPE_MONTHLY_PRICE_ID', 'price_monthly');
 Deno.env.set('STRIPE_LIFETIME_PRICE_ID', 'price_lifetime');
+
+Deno.test('readiness refuses account tokens before reading Stripe or the database', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = () => { throw new Error('Unauthorized request reached a service'); };
+  try { assert((await checkReadiness('ordinary-user-token')).status === 401); }
+  finally { globalThis.fetch = original; }
+});
+
+Deno.test('operator readiness verifies live prices and reports a wrong amount', async () => {
+  const original = globalThis.fetch;
+  Deno.env.set('STRIPE_WEBHOOK_SECRET', 'fake-webhook-test-key');
+  let amount = 399;
+  globalThis.fetch = async input => {
+    const url = String(input);
+    const data = url.includes('/prices/price_monthly') ? {active:true,livemode:true,currency:'usd',unit_amount:amount,recurring:{interval:'month'}}
+      : url.includes('/prices/price_lifetime') ? {active:true,livemode:true,currency:'usd',unit_amount:1000,type:'one_time'}
+      : url.includes('/webhook_endpoints') ? {data:[{url:'https://database.example/functions/v1/stripe-webhook',status:'enabled',enabled_events:['*']}]}
+      : [];
+    return Response.json(data);
+  };
+  try {
+    assert((await (await checkReadiness('fake-test-key')).json()).ok);
+    amount = 1;
+    const failed = await (await checkReadiness('fake-test-key')).json();
+    assert(!failed.ok && !failed.checks.monthlyPrice);
+  } finally { globalThis.fetch = original; Deno.env.delete('STRIPE_WEBHOOK_SECRET'); }
+});
+
+Deno.test('observed Stripe sandbox objects preserve paid-through access and revoke canceled or refunded access', async () => {
+  const original = globalThis.fetch;
+  const oldPrice = Deno.env.get('STRIPE_MONTHLY_PRICE_ID')!;
+  Deno.env.set('STRIPE_MONTHLY_PRICE_ID', observed.active.items.data[0].price.id);
+  let current: any = observed.active, write: any;
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const data = url.includes('/rest/v1/billing_customers') ? {user_id: observed.refunded.metadata.faintr_user}
+      : url.includes('/rest/v1/rpc/sync_billing_purchase') ? (write = JSON.parse(String(init?.body)).p, null) : current;
+    return Response.json(data);
+  };
+  try {
+    await syncSubscription(observed.active.id); assert(write.active);
+    current = observed.scheduledCancellation;
+    await syncSubscription(current.id); assert(write.active && write.cancel_at_period_end);
+    assert(write.expires_at === new Date(current.items.data[0].current_period_end * 1000).toISOString());
+    current = observed.canceled; await syncSubscription(current.id); assert(!write.active);
+    current = observed.refunded; await syncPayment(current.id); assert(!write.active);
+  } finally { globalThis.fetch = original; Deno.env.set('STRIPE_MONTHLY_PRICE_ID', oldPrice); }
+});
 
 Deno.test('webhook accepts signed payloads and rejects tampering, old signatures, missing headers', async () => {
   const t = Math.floor(Date.now() / 1000), payload = '{"type":"checkout.session.completed"}', secret = 'test-webhook-secret';

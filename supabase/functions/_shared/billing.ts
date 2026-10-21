@@ -1,11 +1,12 @@
 import { createClient } from "npm:@supabase/supabase-js@2.117.2";
 
-export const db = () => {
+export const serverKey = () => {
   const keys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') || '{}');
   const key = keys.default || Object.values(keys)[0] || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (typeof key !== 'string') throw new Error('Server database credentials are unavailable.');
-  return createClient(Deno.env.get('SUPABASE_URL')!, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  return key;
 };
+export const db = () => createClient(Deno.env.get('SUPABASE_URL')!, serverKey(), { auth: { persistSession: false, autoRefreshToken: false } });
 export const site = () => Deno.env.get('FAINTR_SITE_URL') || 'https://faintr.com';
 export const price = (plan: string) => Deno.env.get(plan === 'monthly' ? 'STRIPE_MONTHLY_PRICE_ID' : 'STRIPE_LIFETIME_PRICE_ID');
 

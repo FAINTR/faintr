@@ -28,6 +28,11 @@ jobs:
         run: |
           psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/002_billing.sql
           psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/004_vip_tools.sql
+      - name: Verify paid access rules without retaining test data
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/verify_paid_access.sql
       - name: Grant verified owner access
         if: inputs.grant_owner
         env:

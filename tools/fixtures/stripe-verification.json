@@ -1,0 +1,70 @@
+{
+  "note": "Sanitized objects observed through Stripe Test mode on 2026-10-21; all trainer IDs are synthetic. No credentials or card data.",
+  "active": {
+    "id": "sub_1UT0PLIxUUkOJYhZERissTsd",
+    "customer": "cus_VTyJYCIItlf33Y",
+    "status": "active",
+    "cancel_at_period_end": false,
+    "cancel_at": null,
+    "items": {
+      "data": [
+        {
+          "price": {
+            "id": "price_1UT0LpIxUUkOJYhZfOtj6KQP"
+          },
+          "current_period_end": 1795270772
+        }
+      ]
+    }
+  },
+  "scheduledCancellation": {
+    "id": "sub_1UT0PLIxUUkOJYhZERissTsd",
+    "customer": "cus_VTyJYCIItlf33Y",
+    "status": "active",
+    "cancel_at_period_end": true,
+    "cancel_at": 1795270772,
+    "items": {
+      "data": [
+        {
+          "price": {
+            "id": "price_1UT0LpIxUUkOJYhZfOtj6KQP"
+          },
+          "current_period_end": 1795270772
+        }
+      ]
+    }
+  },
+  "canceled": {
+    "id": "sub_1UT0PLIxUUkOJYhZERissTsd",
+    "customer": "cus_VTyJYCIItlf33Y",
+    "status": "canceled",
+    "cancel_at_period_end": false,
+    "cancel_at": null,
+    "items": {
+      "data": [
+        {
+          "price": {
+            "id": "price_1UT0LpIxUUkOJYhZfOtj6KQP"
+          },
+          "current_period_end": 1795270772
+        }
+      ]
+    }
+  },
+  "refunded": {
+    "id": "pi_3UT0VDIxUUkOJYhZ2A0VDI84",
+    "customer": "cus_VTyJyxHl7TF7S9",
+    "status": "succeeded",
+    "currency": "usd",
+    "amount_received": 1000,
+    "metadata": {
+      "faintr_plan": "lifetime",
+      "faintr_user": "22222222-2222-4222-8222-222222222222"
+    },
+    "latest_charge": {
+      "id": "ch_3UT0VDIxUUkOJYhZ2XrnBP9w",
+      "refunded": true,
+      "disputed": false
+    }
+  }
+}

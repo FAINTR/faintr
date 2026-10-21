@@ -1,4 +1,5 @@
 import { db, stripe, form, price, site, syncCheckout, checked } from '../_shared/billing.ts';
+import { checkReadiness } from './readiness.ts';
 
 export async function handleBilling(req: Request) {
   const origin = req.headers.get('origin') || '';
@@ -12,6 +13,7 @@ export async function handleBilling(req: Request) {
   if (origin && !allowed.includes(origin)) return reply({ error: 'Invalid origin.' }, 403);
   const token = req.headers.get('authorization')?.replace(/^Bearer /i, '');
   if (!token) return reply({ error: 'Sign in first.' }, 401);
+  if (req.headers.get('x-faintr-readiness') === '1') return checkReadiness(token);
   const admin = db();
   const { data: { user }, error } = await admin.auth.getUser(token);
   if (error || !user) return reply({ error: 'Sign in first.' }, 401);
