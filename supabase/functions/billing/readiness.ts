@@ -40,14 +40,15 @@ export async function checkReadiness(token: string, checkoutProbe = false) {
       stage = 'checkout_customer';
       const customer = await stripe('customers', form({ name: 'FAINTR configuration verification',
         'metadata[faintr_verification]': 'unpaid_checkout_probe' }), 'faintr-readiness-customer-v1');
+      const probeWindow = Math.floor(Date.now() / 300000);
       for (const plan of ['monthly', 'lifetime']) {
         stage = 'checkout_' + plan;
         const session = await stripe('checkout/sessions', form({ customer: customer.id,
           mode: plan === 'monthly' ? 'subscription' : 'payment',
           'line_items[0][price]': price(plan)!, 'line_items[0][quantity]': '1',
           'metadata[faintr_verification]': 'unpaid_checkout_probe',
-          success_url: site(), cancel_url: site(), expires_at: String(Math.floor(Date.now() / 1000) + 1860),
-        }), `faintr-readiness-${plan}-${Math.floor(Date.now() / 300000)}`);
+          success_url: site(), cancel_url: site(), expires_at: String(probeWindow * 300 + 2160),
+        }), `faintr-readiness-${plan}-${probeWindow}`);
         checks['checkout_' + plan] = session.status === 'open' && session.payment_status === 'unpaid' && !!session.url;
       }
       stage = 'billing_portal';
