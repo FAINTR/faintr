@@ -24,6 +24,7 @@ const ROOT = path.join(__dirname, '..');
 const rq = (m) => require(path.join(ROOT, m));
 const { listFormats, dataFilesFor, rankingFile, loadSchedule, periodAt } = rq('formats');
 const { ENGINE_FILES } = rq('engine');
+const { verifyPvpokeLicense } = rq('pvpoke-license');
 const { buildAll, SCHEMA } = rq('build');
 const { loadTeams } = rq('teamdata');
 const { latestCommit, metaChanges } = rq('updater');
@@ -81,14 +82,16 @@ async function pvpokeSource() {
   }
   const remote = await latestPvPoke();
   if (!remote) throw new Error("Couldn't reach GitHub to check PvPoke's latest version.");
+  const license = verifyPvpokeLicense(await get(`https://raw.githubusercontent.com/pvpoke/pvpoke/${remote.sha}/LICENSE`));
   const src = path.join(CACHE, 'src');
   const stamp = readJ(path.join(src, '.version.json'), {});
-  if (stamp.sha === remote.sha && !FORCE) { log(`PvPoke ${remote.version} already downloaded`); return { src, version: remote.version }; }
+  if (stamp.sha === remote.sha && !FORCE) { fs.writeFileSync(path.join(src, 'LICENSE-pvpoke.txt'), license); log(`PvPoke ${remote.version} already downloaded`); return { src, version: remote.version }; }
   log(`Downloading PvPoke ${remote.version}`);
   const tmp = src + '.new';
   fs.rmSync(tmp, { recursive: true, force: true });
   const fetchTo = async (f) => { const buf = await get(`https://raw.githubusercontent.com/pvpoke/pvpoke/${remote.sha}/src/${f}`); fs.mkdirSync(path.dirname(path.join(tmp, f)), { recursive: true }); fs.writeFileSync(path.join(tmp, f), buf); };
   await fetchTo('data/gamemaster.json');
+  fs.writeFileSync(path.join(tmp, 'LICENSE-pvpoke.txt'), license);
   const gm = readJ(path.join(tmp, 'data/gamemaster.json'));
   const files = [...ENGINE_FILES, ...dataFilesFor(listFormats(gm)).filter((f) => f !== 'data/gamemaster.json')];
   let k = 0;
@@ -206,6 +209,8 @@ function assemble(src, version, built, formats) {
   fs.rmSync(tmp, { recursive: true, force: true });
   fs.mkdirSync(tmp, { recursive: true });
   const files = {}, sizes = {};
+  const sourceLicense = fs.readFileSync(path.join(src, 'LICENSE-pvpoke.txt'));
+  verifyPvpokeLicense(sourceLicense);
   // Content-addressed files: a new version gets a new name, so browsers can cache them forever
   const publish = (rel, buf, ext) => {
     const h = sha(buf).slice(0, 16), name = `d/${h}${ext || path.extname(rel) || '.bin'}`;
@@ -216,6 +221,13 @@ function assemble(src, version, built, formats) {
   // PvPoke engine and data
   const pvFiles = new Set([...ENGINE_FILES, ...dataFilesFor(formats)]);
   for (const f of pvFiles) { const p = path.join(src, f); if (fs.existsSync(p)) publish('pvpoke/' + f, fs.readFileSync(p)); }
+  const provenance = { provider: 'PvPoke', repository: 'https://github.com/pvpoke/pvpoke',
+    revision: readJ(path.join(src, '.version.json'), {}).sha || null, version, license: 'MIT',
+    licenseSha256: sha(sourceLicense), files: [...pvFiles].filter(f => fs.existsSync(path.join(src, f))).sort().map(f => ({ path: f, sha256: sha(fs.readFileSync(path.join(src, f))) })),
+    scope: 'Software, numerical game data, rankings and cup definitions; not a grant of third-party trademark or game-content rights.' };
+  fs.writeFileSync(path.join(tmp, 'source-provenance.json'), JSON.stringify(provenance, null, 2));
+  fs.mkdirSync(path.join(tmp, 'sources'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'sources/index.html'), `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sources — FAINTR</title><style>body{margin:0;background:#22252e;color:#f2f4f7;font:17px/1.7 system-ui,sans-serif}main{max-width:780px;margin:auto;padding:28px 24px 70px}a{color:#f5c937}</style></head><body><main><a href="/">Back to FAINTR</a><h1>Data and simulation sources</h1><p>FAINTR uses <a href="https://github.com/pvpoke/pvpoke">PvPoke's open-source battle simulator</a>, numerical game data, rankings and cup definitions. FAINTR calculates its own team grades, comparisons and account features on top of those inputs.</p><p>The interface uses locally drawn type symbols and FAINTR branding. FAINTR does not connect to a trainer's Pokémon GO account or request game credentials.</p><p><a href="/source-provenance.json">Published source versions and file fingerprints</a> · <a href="/licenses/">Full software and font license notices</a></p><p>Software licenses cover their respective components. They do not provide blanket rights in third-party trademarks or game content. FAINTR is an independent project and is not affiliated with or endorsed by the Pokémon rights holders.</p></main></body></html>`);
   // Team data
   const fmtList = [], premiumData = {};
   for (const r of built) {

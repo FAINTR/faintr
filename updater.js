@@ -8,6 +8,7 @@ const { Worker } = require('worker_threads');
 const { ENGINE_FILES } = require('./engine');
 const { listFormats, dataFilesFor, rankingFile } = require('./formats');
 const store = require('./store');
+const { verifyPvpokeLicense } = require('./pvpoke-license');
 
 const UA = 'FAINTR';
 const TASK_NAME = 'FAINTR daily update';
@@ -92,6 +93,7 @@ async function runUpdate(status, currentSrcDir, opts = {}) {
     return null;
   }
   const sha = remote ? remote.sha : 'master';
+  const license = verifyPvpokeLicense(await get(`https://raw.githubusercontent.com/pvpoke/pvpoke/${sha}/LICENSE`));
   const version = remote ? remote.version : 'latest_' + new Date().toISOString().slice(0, 10);
   const tmpSrc = store.USER_SRC + '.new', tmpData = store.USER_DATA + '.new';
   fs.rmSync(tmpSrc, { recursive: true, force: true }); fs.rmSync(tmpData, { recursive: true, force: true });
@@ -103,6 +105,7 @@ async function runUpdate(status, currentSrcDir, opts = {}) {
   };
   set({ stage: 'download', i: 0, n: 1, message: 'Downloading the game master' });
   await fetchTo('data/gamemaster.json');
+  fs.writeFileSync(path.join(tmpSrc, 'LICENSE-pvpoke.txt'), license);
   const gmData = JSON.parse(fs.readFileSync(path.join(tmpSrc, 'data/gamemaster.json'), 'utf8'));
   const allFormats = listFormats(gmData); // cups PvPoke lists right now
   const files = [...ENGINE_FILES, ...dataFilesFor(allFormats).filter((f) => f !== 'data/gamemaster.json')];
