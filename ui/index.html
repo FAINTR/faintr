@@ -63,6 +63,8 @@
         <a class="social support" href="https://faintr.com/supporters/" target="_blank" rel="noopener"><svg width="16" height="18" viewBox="0 0 20 22" fill="none" aria-hidden="true"><path d="M10 1 18 4v7c0 5-5 8-8 10-3-2-8-5-8-10V4Z" stroke="currentColor" stroke-width="1.5"/><path d="M6 8h8M6 12h6" stroke="currentColor" stroke-width="1.5"/></svg>Support FAINTR</a></span></div>
     <div class="find">
       <aside class="filters panel" aria-label="Filters">
+        <button class="filter-toggle" id="filterToggle" type="button" aria-expanded="false" aria-controls="filterFields"><span id="filterToggleLabel">Filters</span><span id="filterCount" class="filter-count">No filters</span><span class="filter-chevron" aria-hidden="true">⌄</span></button>
+        <div id="filterFields">
         <h3>Your Roster</h3>
         <label class="check"><input type="checkbox" id="ownedOnly"> Only Pokémon in my Roster</label>
         <p class="note" id="ownedNote"></p>
@@ -79,6 +81,8 @@
         <p class="hint">Weights for the overall score. 0 ignores a grade.</p>
         <div id="weights"></div>
         <button class="btn quiet" style="width:100%;justify-content:center;margin-top:12px" type="button" id="resetBtn">Reset filters and weights</button>
+        <button class="btn primary filter-apply" id="applyFilters" type="button">Show teams</button>
+        </div>
       </aside>
       <div>
         <div class="resultbar">
@@ -391,6 +395,11 @@
 
 
 <div class="toast" id="toast" role="status" hidden></div>
+<dialog id="gradeHelpDlg" class="grade-help-dialog" aria-labelledby="gradeHelpTitle">
+  <div class="share-dialog-head"><h2 id="gradeHelpTitle">Grades and checks</h2><button class="btn quiet small" id="closeGradeHelp" type="button">Close</button></div>
+  <p class="note">A is the strongest grade. The overall score combines these grades using your chosen weights. It is a score out of 100, not a win percentage.</p>
+  <dl id="gradeHelpList"></dl>
+</dialog>
 <dialog id="teamShareDialog" class="team-share-dialog" aria-labelledby="teamShareTitle">
   <div class="share-dialog-head"><h2 id="teamShareTitle">Share this team</h2><button class="btn quiet small" id="closeShareBtn" type="button" aria-label="Close sharing">Close</button></div>
   <p class="note">Send a link to open this exact team, or download its card to attach to a post.</p>

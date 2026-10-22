@@ -41,9 +41,9 @@ const catalogById = () => (S._cat || (S._cat = new Map(S.fmt.catalog.map((c) => 
 const rosterIds = () => new Set(S.roster.map((e) => e.id));
 
 /* ---------- shared pieces */
-function card(grades) {
-  const tile = (k) => `<span class="tile" title="${esc(G[k].label)}: ${esc(grades[k].text)}. ${esc(G[k].desc)}"><span class="L ${grades[k].letter}">${grades[k].letter}</span><small>${SHORT[k]}</small></span>`;
-  return `<div class="card"><div><div class="setname">PvPoke grades</div><div class="set">${KEYS.filter((k) => G[k].pvpoke).map(tile).join('')}</div></div>
+function card(grades, fullLabels = false) {
+  const tile = (k) => `<span class="tile" title="${esc(G[k].label)}: ${esc(grades[k].text)}. ${esc(G[k].desc)}"><span class="L ${grades[k].letter}">${grades[k].letter}</span><small>${esc(fullLabels ? G[k].label : SHORT[k])}</small></span>`;
+  return `<div class="card${fullLabels ? ' full-labels' : ''}"><div><div class="setname">PvPoke grades</div><div class="set">${KEYS.filter((k) => G[k].pvpoke).map(tile).join('')}</div></div>
     <div><div class="setname">FAINTR team checks</div><div class="set">${KEYS.filter((k) => !G[k].pvpoke).map(tile).join('')}</div></div></div>`;
 }
 // Overall score, colored by where it ranks among every team in this league or cup
@@ -212,7 +212,7 @@ function buildPanel(b) {
 
 /* ======================= FIND TEAMS ======================= */
 let qTimer = null, qSeq = 0;
-const scheduleQuery = () => { clearTimeout(qTimer); qTimer = setTimeout(runQuery, 180); };
+const scheduleQuery = () => { syncFilterCount(); clearTimeout(qTimer); qTimer = setTimeout(runQuery, 180); };
 function ownedList() {
   if (!S.ownedOnly) return null;
   const pool = new Set(S.fmt.pool.map((p) => p.id));
@@ -231,6 +231,7 @@ $('#ownedOnly').addEventListener('change', (e) => { S.ownedOnly = e.target.check
 document.addEventListener('click', (e) => { const a = e.target.closest('[data-goto]'); if (a) { e.preventDefault(); showView(a.dataset.goto); } });
 
 async function runQuery() {
+  syncFilterCount();
   if (!S.fmt) return;
   const seq = ++qSeq;
   if (!S.fmt.built) {
@@ -262,8 +263,9 @@ function renderTeams(teams, owned) {
   S.visibleTeams = teams;
   el.innerHTML = teams.map((t, n) => `<article class="team panel" data-i="${t.i}">
       <button class="head" type="button" aria-expanded="false"><span class="rank">${n + 1}</span>
-        <span class="members">${t.members.map((m, k) => monCell(m, t.roles[k])).join('')}</span>${card(t.grades)}
+        <span class="members">${t.members.map((m, k) => monCell(m, t.roles[k])).join('')}</span>
         ${S.anti && S.fmt.anti ? antiBadge(t.anti) : scoreBadge(t.composite, t.tier)}</button>
+      <details class="team-grade-details"><summary>Grades and checks</summary>${card(t.grades, true)}<button class="btn quiet small" type="button" data-grade-help>What do these grades mean?</button></details>
       ${WEB ? '<div class="team-share-row"><button class="btn small quiet shareListBtn" type="button">Share team</button></div>' : ''}
       <div class="quick" hidden></div></article>`).join('');
 }
@@ -337,7 +339,27 @@ document.addEventListener('click', (e) => {
   if (b.dataset.list === 'opp') { CF.opp.splice(+b.dataset.i, 1); renderChips('opp'); return; }
   S[b.dataset.list].splice(+b.dataset.i, 1); renderChips(b.dataset.list); scheduleQuery();
 });
+function syncFilterCount() {
+  const changedWeights = KEYS.some(k => S.info && S.weights[k] !== S.info.weights[k]);
+  const count = S.include.length + S.exclude.length + Object.values(S.mins).filter(v => v && v !== 'any').length
+    + Number(S.maxShadow !== '') + Number(S.ownedOnly) + Number(changedWeights);
+  $('#filterCount').textContent = count ? count + ' active' : 'No filters';
+}
+function setFiltersOpen(open) {
+  $('aside.filters').classList.toggle('is-open', open);
+  $('#filterToggle').setAttribute('aria-expanded', String(open));
+  $('#filterToggleLabel').textContent = open ? 'Hide filters' : 'Filters';
+}
+$('#filterToggle').addEventListener('click', () => setFiltersOpen($('#filterToggle').getAttribute('aria-expanded') !== 'true'));
+$('#applyFilters').addEventListener('click', () => {
+  setFiltersOpen(false); $('#filterToggle').focus({ preventScroll: true });
+  $('#filterToggle').scrollIntoView({ block: 'start' });
+});
+$('#closeGradeHelp').addEventListener('click', () => $('#gradeHelpDlg').close());
+document.addEventListener('click', e => { if (e.target.closest('[data-grade-help]')) $('#gradeHelpDlg').showModal(); });
 function buildFilters() {
+  const help = { coverage: 'How well your team holds up against its toughest counters.', bulk: 'How much damage your team can take, based on Defense and HP.', safety: 'How well your Pokémon perform when switched into battle.', consistency: 'How reliably your moves work without needing to trick an opponent into shielding.', blindSpots: 'Opponents that beat all three of your Pokémon at one shield. Fewer is better.', twoAnswers: 'How often at least two of your Pokémon can beat the same meta opponent at one shield.', resilience: 'How well your coverage holds up across battles with zero, one and two shields.', sharedWeak: 'Common attack types that hit at least two of your Pokémon for super-effective damage. Fewer is better.', pilot: 'How often matchups are close or change with shields. A stronger grade means fewer tricky matchups.', metaWins: 'Simulated three-on-three wins against the strongest varied teams in this league or cup.' };
+  $('#gradeHelpList').innerHTML = KEYS.map(k => '<dt>' + esc(G[k].label) + '</dt><dd>' + esc(help[k]) + '</dd>').join('');
   $('#mins').innerHTML = KEYS.map((k) => `<div class="row2"><span title="${esc(G[k].desc)}">${esc(G[k].label)}</span><select data-k="${k}" aria-label="Minimum ${esc(G[k].label)}"><option value="any">Any</option><option>A</option><option>B</option><option>C</option><option>D</option></select></div>`).join('');
   const wRow = (k) => `<label class="weight"><span title="${esc(G[k].desc)}">${esc(G[k].label)}</span><input type="range" min="0" max="5" step="1" data-k="${k}"><output></output></label>`;
   $('#weights').innerHTML = '<div class="group-label">PvPoke grades</div>' + KEYS.filter((k) => G[k].pvpoke).map(wRow).join('') + '<div class="group-label">FAINTR team checks</div>' + KEYS.filter((k) => !G[k].pvpoke).map(wRow).join('');
@@ -350,12 +372,12 @@ function buildFilters() {
 function syncFilters() {
   $$('#mins select').forEach((s) => { s.value = S.mins[s.dataset.k] || 'any'; });
   $$('#weights input').forEach((r) => { r.value = S.weights[r.dataset.k]; r.nextElementSibling.textContent = r.value; });
-  $('#maxShadow').value = S.maxShadow; renderChips('include'); renderChips('exclude');
+  $('#maxShadow').value = S.maxShadow; renderChips('include'); renderChips('exclude'); syncFilterCount();
 }
 $('#mins').addEventListener('change', (e) => { S.mins[e.target.dataset.k] = e.target.value; scheduleQuery(); });
 $('#weights').addEventListener('input', (e) => { if (!e.target.dataset.k) return; S.weights[e.target.dataset.k] = +e.target.value; e.target.nextElementSibling.textContent = e.target.value; scheduleQuery(); });
 $('#maxShadow').addEventListener('change', (e) => { S.maxShadow = e.target.value; scheduleQuery(); });
-$('#resetBtn').addEventListener('click', () => { S.include = []; S.exclude = []; S.mins = {}; S.maxShadow = ''; S.weights = { ...S.info.weights }; S.limit = 50; syncFilters(); runQuery(); });
+$('#resetBtn').addEventListener('click', () => { S.ownedOnly = false; $('#ownedOnly').checked = false; store.set('faintr.ownedOnly', ''); S.include = []; S.exclude = []; S.mins = {}; S.maxShadow = ''; S.weights = { ...S.info.weights }; S.limit = 50; syncFilters(); runQuery(); });
 
 /* ======================= POKEMON EDITOR (grader + battle) ======================= */
 // A reusable block: Roster shortcut, search, moves, IVs with live IV rank.
@@ -363,7 +385,7 @@ function monEditor(el, opts = {}) {
   const st = { p: null, iv: null, ivMode: 'default' };
   el.innerHTML = `<div class="pickrow"><div class="picker"><input type="text" placeholder="Search Pokémon" aria-label="${esc(opts.label || 'Pokémon')}"><div class="suggest" hidden></div></div>
     <select class="fromRoster" aria-label="Load from your Roster" title="Load one of your saved Pokémon"></select></div>
-    <div class="picked note">None picked yet.</div>
+    <div class="editor-details"${opts.compactEmpty ? ' hidden' : ''}><div class="picked note">None picked yet.</div>
     <label class="field">Fast move</label><select data-m="0" disabled></select>
     <label class="field">Charged move 1</label><select data-m="1" disabled></select>
     <label class="field">Charged move 2</label><select data-m="2" disabled></select>
@@ -373,7 +395,7 @@ function monEditor(el, opts = {}) {
       <label>HP<input type="number" min="0" max="15" data-iv="hp" disabled></label>
       <label>Max level<select data-cap disabled><option value="50">50</option><option value="51">51 (best buddy)</option><option value="40">40</option><option value="41">41 (best buddy)</option></select></label></div>
       <div class="presets"><button class="btn small" type="button" data-preset="default" disabled>PvPoke default IVs</button><button class="btn small" type="button" data-preset="rank1" disabled>Rank 1 IVs</button></div>
-      <div class="ivstats note">Pick a Pokémon to see its level, CP and IV rank.</div></div>`;
+      <div class="ivstats note">Pick a Pokémon to see its level, CP and IV rank.</div></div></div>`;
   const sels = $$('select[data-m]', el), ivIn = $$('input[data-iv]', el), cap = $('select[data-cap]', el), rsel = $('.fromRoster', el);
   const getIVs = () => ({ atk: +ivIn[0].value, def: +ivIn[1].value, hp: +ivIn[2].value });
   let ivTimer = null, ivSeq = 0;
@@ -381,7 +403,7 @@ function monEditor(el, opts = {}) {
     const elig = S.roster.filter((e) => catalogById().has(e.id));
     rsel.innerHTML = `<option value="">${S.roster.length ? (elig.length ? `Roster (${elig.length})` : 'Roster (none fit)') : 'Roster (empty)'}</option>`
       + elig.map((e) => `<option value="${e.uid}">${esc(e.nickname ? `${e.nickname} (${e.name})` : e.name)} · ${e.ivs.atk}/${e.ivs.def}/${e.ivs.hp}${e.cp ? ` · CP ${e.cp}` : ''}</option>`).join('');
-    rsel.disabled = !elig.length;
+    rsel.disabled = !elig.length; rsel.hidden = !!opts.compactEmpty && !elig.length;
   }
   rsel.addEventListener('change', () => {
     const e = S.roster.find((x) => x.uid === rsel.value); if (!e) return;
@@ -411,6 +433,7 @@ function monEditor(el, opts = {}) {
   }
   function set(p, preset) {
     st.p = p; st.label = preset && preset.label ? preset.label : '';
+    $('.editor-details', el).hidden = false;
     $('.picked', el).innerHTML = `<b>${esc(preset && preset.label ? preset.label : p.name)}</b>${typeDots(p.types)} <span class="note">${preset && preset.label ? esc(p.name) + ', ' : ''}${p.rank < 9999 ? `#${p.rank} in ${esc(title())}` : 'Unranked here'}</span>`;
     const opt = (list, sel, none) => (none ? '<option value="">None</option>' : '') + list.map(([id, name]) => `<option value="${id}" ${id === sel ? 'selected' : ''}>${esc(name)}</option>`).join('');
     const ok = (id, list) => list.some(([x]) => x === id);
@@ -461,7 +484,7 @@ function buildSlots() {
   $('#slots').innerHTML = ROLES.map((r, i) => `<div class="slot panel" data-s="${i}"><div class="slothead"><h3>${r}</h3>
       <span class="slotmove">${i > 0 ? `<button type="button" class="btn small quiet" data-move="${i}" data-dir="-1" title="Swap with ${ROLES[i - 1]}" aria-label="Swap with ${ROLES[i - 1]}">◀</button>` : ''}${i < 2 ? `<button type="button" class="btn small quiet" data-move="${i}" data-dir="1" title="Swap with ${ROLES[i + 1]}" aria-label="Swap with ${ROLES[i + 1]}">▶</button>` : ''}</span></div><div class="ed"></div></div>`).join('');
   $$('#slots .slot').forEach((el, i) => {
-    slots[i] = monEditor($('.ed', el), { label: ROLES[i], onChange: () => { const v = slots[i].value(); if (v) api('/api/prefetch', v).catch(() => {}); },
+    slots[i] = monEditor($('.ed', el), { compactEmpty: true, label: ROLES[i], onChange: () => { const v = slots[i].value(); if (v) api('/api/prefetch', v).catch(() => {}); },
       // Picking a Pokemon that's already in another slot swaps the two slots
       beforeSet: (p, preset) => {
         const j = slots.findIndex((sl, k) => k !== i && sl.value() && sl.value().id === p.id);

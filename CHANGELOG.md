@@ -1,5 +1,11 @@
 # What's New
 
+## October 22, 2026 — Easier to browse
+
+- **Teams first on phones.** Open Filters when you need them. See how many settings are active, then tap Show teams to return to the results.
+- **Cleaner team cards.** See the Pokémon and score first. Expand Grades and checks for the full labels and a plain-English explanation.
+- **Simpler Team Grader.** Pick a Pokémon to reveal its moves and IVs. Empty slots stay out of your way.
+
 ## October 22, 2026 — Share your team
 
 - **Share straight from the team list.** Tap Share team, then Copy link.
