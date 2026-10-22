@@ -1,0 +1,77 @@
+name: Discord daily Top 10
+
+on:
+  schedule:
+    - cron: '0 14 * * *' # 9 a.m. Central during daylight saving time
+    - cron: '0 15 * * *' # 9 a.m. Central during standard time
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Validate rankings and connections without posting'
+        type: boolean
+        default: true
+      quiet:
+        description: 'Suppress everyone pings for a manual setup/test post'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: faintr-discord-rankings
+  cancel-in-progress: false
+
+jobs:
+  rankings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Select the 9 a.m. Central schedule
+        id: gate
+        env:
+          EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          offset=$(TZ=America/Chicago date +%z)
+          if [ "$EVENT" = schedule ] && { { [ "$SCHEDULE" = '0 14 * * *' ] && [ "$offset" != '-0500' ]; } || { [ "$SCHEDULE" = '0 15 * * *' ] && [ "$offset" != '-0600' ]; }; }; then
+            echo 'skip=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.skip != 'true'
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          node-version: 22
+      - name: Restore sent-message ledger
+        if: steps.gate.outputs.skip != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: .discord-state
+          key: discord-rankings-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: discord-rankings-v1-
+      - name: Validate ranking publisher
+        if: steps.gate.outputs.skip != 'true'
+        run: node --test tools/discord-rankings.test.cjs
+      - name: Post current published league teams
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          DISCORD_META_WEBHOOK_URL: ${{ secrets.DISCORD_META_WEBHOOK_URL }}
+          DISCORD_ANTIMETA_WEBHOOK_URL: ${{ secrets.DISCORD_ANTIMETA_WEBHOOK_URL }}
+          EVENT: ${{ github.event_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          QUIET: ${{ inputs.quiet }}
+        run: |
+          if [ "$EVENT" = workflow_dispatch ] && [ "$DRY_RUN" != false ]; then
+            node tools/discord-rankings.cjs --verify
+          elif [ "$EVENT" = workflow_dispatch ] && [ "$QUIET" != false ]; then
+            node tools/discord-rankings.cjs --send --quiet
+          else
+            node tools/discord-rankings.cjs --send
+          fi
+      - name: Preserve sent-message ledger even after a partial failure
+        if: always() && steps.gate.outputs.skip != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .discord-state
+          key: discord-rankings-v1-${{ github.run_id }}-${{ github.run_attempt }}

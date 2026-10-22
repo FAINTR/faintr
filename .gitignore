@@ -3,6 +3,7 @@ dist/
 site/
 site.new/
 .webcache/
+.discord-state/
 *.log
 .env
 .env.*
