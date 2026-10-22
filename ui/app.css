@@ -513,11 +513,11 @@ tr.me td { background: rgba(245,184,0,.18); font-weight: 600; }
 .discordbtn:hover { background: #4752C4; border-color: #4752C4; }
 .authdlg .actions input { flex: 1; min-width: 0; }
 
-/* ---------- website loading screen */
-.loader { position: fixed; inset: 0; z-index: 70; background: rgba(20,22,30,.55); display: grid; place-items: center; padding: 16px; }
-.loader .panel { width: min(420px, 100%); padding: 22px 24px; display: grid; gap: 10px; }
-.loader b { font-size: 17px; }
-.loader progress { width: 100%; }
+/* ---------- inline website loading status */
+.loader { display: grid; gap: 8px; padding: 16px 0; }
+.loader b { font-size: 14px; font-weight: 500; }
+.loader progress { width: 180px; max-width: 100%; height: 5px; accent-color: var(--fr-red); }
+.loader .note { margin: 0; }
 
 /* ---------- phones and small windows */
 .find > *, .view, .team { min-width: 0; }

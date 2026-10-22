@@ -82,9 +82,10 @@
       </aside>
       <div>
         <div class="resultbar">
-          <strong id="matched">Searching</strong>
+          <strong id="matched"></strong>
           <span class="tierlegend" id="tierLegend"></span>
         </div>
+        <div class="loader" id="loader" role="status" hidden><b id="loaderTitle">Loading teams…</b><progress id="loaderProg" aria-label="Team data download"></progress><span class="note" id="loaderNote">Your teams will appear here when ready.</span></div>
         <div class="teams" id="teams"></div>
         <button class="btn quiet more" id="moreBtn" type="button" hidden>Show 50 more</button>
       </div>
@@ -383,7 +384,6 @@
 </dialog>
 
 
-<div class="loader" id="loader" hidden><div class="panel"><b id="loaderTitle">Loading FAINTR</b><progress id="loaderProg" max="1" value="0"></progress><span class="note" id="loaderNote">Starting the battle engine</span></div></div>
 <div class="toast" id="toast" role="status" hidden></div>
 <!--WEB-SCRIPTS-->
 <script src="/static/app.js"></script>

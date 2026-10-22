@@ -231,6 +231,7 @@ $('#ownedOnly').addEventListener('change', (e) => { S.ownedOnly = e.target.check
 document.addEventListener('click', (e) => { const a = e.target.closest('[data-goto]'); if (a) { e.preventDefault(); showView(a.dataset.goto); } });
 
 async function runQuery() {
+  if (!S.fmt) return;
   const seq = ++qSeq;
   if (!S.fmt.built) {
     $('#matched').textContent = ''; $('#moreBtn').hidden = true; $('#tierLegend').hidden = true;
@@ -1635,12 +1636,13 @@ if (WEB) {
     if (st.user && c.saved && hasPremium() && !AUTH.offered) { AUTH.offered = true; showToast(`You have ${c.saved} saved team${c.saved === 1 ? '' : 's'} in this browser.`, { label: 'Add to my account', run: async () => { await window.FAINTR_BRIDGE.auth.moveLocalToAccount(); if ($('#view-saved').classList.contains('on')) loadSaved(); showToast('Added to your account.'); } }); }
   });
 }
-// Loading screen while the website starts its engine and downloads team data
+// Keep startup progress in the results area while the rest of the site stays visible.
 function showLoader(title, loaded, total) {
   const L = $('#loader'); L.hidden = false;
   $('#loaderTitle').textContent = title;
-  $('#loaderProg').max = total || 1; $('#loaderProg').value = total ? loaded : 0;
-  $('#loaderNote').textContent = total ? `${(loaded / 1048576).toFixed(1)} of ${(total / 1048576).toFixed(1)} MB. Saved for next time.` : 'Starting the battle engine';
+  $('#loaderProg').max = total || 1;
+  if (total) $('#loaderProg').value = loaded; else $('#loaderProg').removeAttribute('value');
+  $('#loaderNote').textContent = total ? `${(loaded / 1048576).toFixed(1)} of ${(total / 1048576).toFixed(1)} MB. Saved for next time.` : 'Your teams will appear here when ready.';
 }
 
 /* ======================= tabs + boot ======================= */
@@ -1668,12 +1670,10 @@ async function loadInfo() {
 (async function init() {
   if (WEB) {
     document.documentElement.classList.add('web');
-    showLoader('Loading FAINTR');
+    showLoader('Loading teams…');
     // Big team files load in the background; show progress while the first one arrives
     window.FAINTR_BRIDGE.onChange((st) => { if (st.progress && !S.booted) showLoader(st.progress.label, st.progress.loaded, st.progress.total); });
-    try { await window.FAINTR_BRIDGE.ready; } catch (e) {
-      $('#loaderTitle').textContent = "FAINTR couldn't start"; $('#loaderNote').textContent = `${e.message} Try reloading the page. Old browsers may not be supported.`; return;
-    }
+    await window.FAINTR_BRIDGE.ready;
     syncAccount();
   }
   await loadInfo();
@@ -1705,4 +1705,9 @@ async function loadInfo() {
   }).catch(() => {}); api('/core/refresh-roster', {}, { noF: true }).then(() => loadRoster()).catch(() => {}); }
 
   pollStatus();
-})();
+})().catch(e => {
+  if (!WEB) return showToast(e.message);
+  showLoader("Couldn't load teams");
+  $('#loaderProg').hidden = true;
+  $('#loaderNote').textContent = `${e.message} Try reloading the page.`;
+});
