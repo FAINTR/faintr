@@ -495,7 +495,7 @@ tr.me td { background: rgba(245,184,0,.18); font-weight: 600; }
 .social i { width: 15px; height: 15px; display: inline-block; background: currentColor; -webkit-mask: var(--ico) center / contain no-repeat; mask: var(--ico) center / contain no-repeat; }
 .social.discord { background: #5865F2; --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 2h10a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7l-4 3v-3a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm2 4.5a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4zm6 0a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4z'/%3E%3C/svg%3E"); }
 .social.discord:hover { background: #4752C4; }
-.social.support { background: var(--fr-amber); color: var(--fr-charcoal); font-size: 12px; gap: 6px; font-weight: 600; min-height: 34px; }
+.social.support { background: var(--fr-amber); color: var(--fr-charcoal); gap: 6px; }
 .social.support:hover { background: #E3AB00; }
 .social.support svg { flex: none; }
 .social.patreon { background: #FF424D; color: #1E2129; --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 14.5 2.2 8.9A3.6 3.6 0 0 1 8 4.2a3.6 3.6 0 0 1 5.8 4.7z'/%3E%3C/svg%3E"); }
@@ -505,6 +505,8 @@ tr.me td { background: rgba(245,184,0,.18); font-weight: 600; }
 .fmttools { display: inline-flex; gap: 8px; align-items: center; white-space: nowrap; }
 .fmttools button { background: transparent; border: 1px solid #4A5060; color: var(--fr-mist); border-radius: var(--r-control); padding: 3px 10px; cursor: pointer; font-size: 12.5px; }
 .fmttools button:hover { border-color: var(--fr-steel); }
+.fmttools button, .fmttools .social.support { padding: 3px 10px; font-size: 12.5px; line-height: 1.5; font-weight: 400; }
+.fmttools .social.support svg { width: 13px; height: 15px; }
 :root[data-mode="anti"] .social.discord { color: #fff; }
 
 /* ---------- report a bug */

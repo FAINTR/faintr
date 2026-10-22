@@ -11,9 +11,3 @@
 Your private roster, account details and notes are never included. Team results use the latest available game data, so grades can change after updates.
 
 - **Support link, easier to find.** Support FAINTR now sits beside Data and updates.
-
-### Behind the scenes
-
-- Updated the site's security policy to allow Cloudflare's existing traffic analytics.
-- Added a branded preview when you share FAINTR's homepage.
-- The site still opens directly to the tools—no tutorial or extra step.
