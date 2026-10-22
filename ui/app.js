@@ -41,9 +41,9 @@ const catalogById = () => (S._cat || (S._cat = new Map(S.fmt.catalog.map((c) => 
 const rosterIds = () => new Set(S.roster.map((e) => e.id));
 
 /* ---------- shared pieces */
-function card(grades, fullLabels = false) {
-  const tile = (k) => `<span class="tile" title="${esc(G[k].label)}: ${esc(grades[k].text)}. ${esc(G[k].desc)}"><span class="L ${grades[k].letter}">${grades[k].letter}</span><small>${esc(fullLabels ? G[k].label : SHORT[k])}</small></span>`;
-  return `<div class="card${fullLabels ? ' full-labels' : ''}"><div><div class="setname">PvPoke grades</div><div class="set">${KEYS.filter((k) => G[k].pvpoke).map(tile).join('')}</div></div>
+function card(grades) {
+  const tile = (k) => `<span class="tile" title="${esc(G[k].label)}: ${esc(grades[k].text)}. ${esc(G[k].desc)}"><span class="L ${grades[k].letter}">${grades[k].letter}</span><small>${SHORT[k]}</small></span>`;
+  return `<div class="card"><div><div class="setname">PvPoke grades</div><div class="set">${KEYS.filter((k) => G[k].pvpoke).map(tile).join('')}</div></div>
     <div><div class="setname">FAINTR team checks</div><div class="set">${KEYS.filter((k) => !G[k].pvpoke).map(tile).join('')}</div></div></div>`;
 }
 // Overall score, colored by where it ranks among every team in this league or cup
@@ -263,9 +263,8 @@ function renderTeams(teams, owned) {
   S.visibleTeams = teams;
   el.innerHTML = teams.map((t, n) => `<article class="team panel" data-i="${t.i}">
       <button class="head" type="button" aria-expanded="false"><span class="rank">${n + 1}</span>
-        <span class="members">${t.members.map((m, k) => monCell(m, t.roles[k])).join('')}</span>
+        <span class="members">${t.members.map((m, k) => monCell(m, t.roles[k])).join('')}</span>${card(t.grades)}
         ${S.anti && S.fmt.anti ? antiBadge(t.anti) : scoreBadge(t.composite, t.tier)}</button>
-      <details class="team-grade-details"><summary>Grades and checks</summary>${card(t.grades, true)}<button class="btn quiet small" type="button" data-grade-help>What do these grades mean?</button></details>
       ${WEB ? '<div class="team-share-row"><button class="btn small quiet shareListBtn" type="button">Share team</button></div>' : ''}
       <div class="quick" hidden></div></article>`).join('');
 }
@@ -292,6 +291,7 @@ function quickHTML(d) {
     <div><h4>Next steps</h4>
       <div class="actions" style="margin-top:0"><button class="btn primary fullBtn" type="button">Open full report</button>
         <button class="btn swapBtn" type="button">Find the best swap</button><a class="btn" href="${d.pvpoke}" target="_blank" rel="noopener">Open on pvpoke.com</a></div>
+      <div class="actions"><button class="btn quiet small" type="button" data-grade-help>What do these grades mean?</button></div>
       <div class="swaps" style="margin-top:10px;font-size:14px"></div></div>`;
 }
 $('#teams').addEventListener('click', async (e) => {
