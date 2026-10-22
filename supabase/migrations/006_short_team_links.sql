@@ -20,7 +20,7 @@ revoke all on all tables in schema faintr_private from public, anon, authenticat
 create or replace function public.create_shared_team(p_team jsonb, p_write_key text, p_rate_key text)
 returns text language plpgsql security definer set search_path = pg_catalog, faintr_private as $$
 declare
-  fingerprint bytea; short_id text; found_team jsonb; count_hits integer; attempt integer;
+  team_fingerprint bytea; short_id text; found_team jsonb; count_hits integer; attempt integer;
   member jsonb; weights jsonb; clean_members jsonb := '[]'; clean_team jsonb;
 begin
   if not exists (select 1 from share_settings where write_key_hash = sha256(convert_to(p_write_key, 'UTF8'))) then
@@ -51,20 +51,20 @@ begin
     where x.key <> all(array['coverage','bulk','safety','consistency','blindSpots','twoAnswers','resilience','sharedWeak','pilot','metaWins'])
       or x.value::text !~ '^[0-5]$') then raise exception 'Invalid shared weights'; end if;
   clean_team := jsonb_build_object('v',1,'f',p_team->'f','m',clean_members,'w',weights);
-  fingerprint := sha256(convert_to(clean_team::text,'UTF8'));
+  team_fingerprint := sha256(convert_to(clean_team::text,'UTF8'));
   insert into share_limits as limits(key,minute,hits) values(p_rate_key,date_trunc('minute',now()),1)
     on conflict(key) do update set minute=excluded.minute,
       hits=case when limits.minute=excluded.minute then limits.hits+1 else 1 end returning hits into count_hits;
   if count_hits > 30 then raise exception 'Sharing rate limit' using errcode='P0001'; end if;
   delete from share_limits where minute < now()-interval '10 minutes';
-  select id into short_id from shared_teams t where t.fingerprint = create_shared_team.fingerprint;
+  select id into short_id from shared_teams t where t.fingerprint = team_fingerprint;
   if found then return short_id; end if;
   for attempt in 0..4 loop
-    short_id := left(translate(encode(sha256(fingerprint || convert_to(attempt::text,'UTF8')),'base64'),'+/','-_'),12);
-    insert into shared_teams(id,fingerprint,team) values(short_id,fingerprint,clean_team) on conflict do nothing;
+    short_id := left(translate(encode(sha256(team_fingerprint || convert_to(attempt::text,'UTF8')),'base64'),'+/','-_'),12);
+    insert into shared_teams(id,fingerprint,team) values(short_id,team_fingerprint,clean_team) on conflict do nothing;
     select team into found_team from shared_teams where id=short_id;
     if found_team=clean_team then return short_id; end if;
-    select id into short_id from shared_teams t where t.fingerprint = create_shared_team.fingerprint;
+    select id into short_id from shared_teams t where t.fingerprint = team_fingerprint;
     if found then return short_id; end if;
   end loop;
   raise exception 'Could not allocate a short link';
