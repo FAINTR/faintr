@@ -262,10 +262,11 @@ function renderTeams(teams, owned) {
   }
   S.visibleTeams = teams;
   el.innerHTML = teams.map((t, n) => `<article class="team panel" data-i="${t.i}">
-      <button class="head" type="button" aria-expanded="false"><span class="rank">${n + 1}</span>
-        <span class="members">${t.members.map((m, k) => monCell(m, t.roles[k])).join('')}</span>${card(t.grades)}
-        ${S.anti && S.fmt.anti ? antiBadge(t.anti) : scoreBadge(t.composite, t.tier)}</button>
-      ${WEB ? '<div class="team-share-row"><button class="btn small quiet shareListBtn" type="button">Share team</button></div>' : ''}
+      <div class="team-summary"><button class="head" type="button" aria-expanded="false"><span class="rank">${n + 1}</span>
+        <span class="members">${t.members.map((m, k) => monCell(m, t.roles[k])).join('')}</span></button>
+      <div class="team-metrics">${card(t.grades)}<div class="team-overall"><div class="setname">${S.anti && S.fmt.anti ? 'Meta wins' : 'Overall'}</div>
+        ${S.anti && S.fmt.anti ? antiBadge(t.anti) : scoreBadge(t.composite, t.tier)}
+        ${WEB ? '<button class="btn small quiet shareListBtn" type="button">Share team</button>' : ''}</div></div></div>
       <div class="quick" hidden></div></article>`).join('');
 }
 // Anti-Meta score: share of games won against the meta field, on the same five-step color scale
@@ -301,7 +302,7 @@ $('#teams').addEventListener('click', async (e) => {
     try { const detail=q._d || await api('/api/team?i='+art.dataset.i); await shareTeam(detail.input); }
     catch(err){showToast(err.message);} return;
   }
-  if (e.target.closest('.head')) {
+  if (e.target.closest('.head, .team-metrics')) {
     const open = q.hidden; q.hidden = !open; $('.head', art).setAttribute('aria-expanded', open);
     if (open && !q._d) {
       q.innerHTML = '<span class="note"><span class="spin"></span> Loading</span>';
