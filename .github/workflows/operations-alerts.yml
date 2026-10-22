@@ -5,6 +5,7 @@ on:
     types: [completed]
 permissions:
   contents: read
+  actions: read
   issues: write
 concurrency:
   group: operations-alert-${{ github.event.workflow_run.workflow_id }}

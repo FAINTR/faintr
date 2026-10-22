@@ -50,6 +50,7 @@
     "@fontsource/inter": "^5.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@supabase/supabase-js": "^2.117.2",
     "@yao-pkg/pkg": "^6.23.0",
     "esbuild": "^0.24.0"

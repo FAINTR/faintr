@@ -182,16 +182,19 @@ Only admins can use it. It refuses to start a second update while one is running
 
 Supabase's free plan has no backups, so **FAINTR database backup** runs every Sunday:
 
-- It saves an encrypted copy of accounts, Rosters, saved teams and bug reports as a GitHub artifact.
+- It saves an encrypted copy of accounts, Rosters, saved teams, battle history, bug reports and public short links as a GitHub artifact. Application schema, functions, constraints and privacy policies are included. Auth schema definitions are included for recovery dependencies; only `auth.users` and `auth.identities` contain backed-up auth data (not sessions or audit logs).
 - Each copy is kept for 35 days.
 - It needs the `SUPABASE_DB_URL`, `SUPABASE_DB_PASSWORD` and `BACKUP_PASSPHRASE` secrets (the separate password is optional for an existing URI that already contains it).
-- Run it by hand any time from the Actions tab.
+- Run it by hand any time from the Actions tab. Missing credentials fail visibly instead of silently skipping.
+- A second job downloads the encrypted artifact, decrypts it and restores it into a fresh, temporary PostgreSQL 17 service. Every archived table is compared byte-for-byte after sorting COPY rows; constraints, RLS and sharing functions are checked. No customer rows or hashes are printed. Plaintext files and the database disappear with the runner.
 
-To restore (rarely needed; ask Claude to walk you through it):
+To rehearse recovery safely:
 
 1. Download the artifact.
-2. Decrypt it with `gpg --decrypt` and your passphrase.
-3. Load it with `pg_restore` into a Supabase project that already has `001_init.sql` applied.
+2. Run **FAINTR database backup** to make and rehearse a new encrypted archive. Its recovery job has no production database credentials and can only target the empty loopback database `faintr_restore`.
+3. Actual disaster recovery should start in a separate Supabase project, with a reviewed plan for schema, platform-managed auth objects, roles/ownership, grants and current migrations. The offline drill proves application data and SQL recovery; it does not test Google/Discord OAuth, outbound email, platform configuration or the ability to restore into an existing project. Never point the rehearsal at production.
+
+Archives made before this change are **data only**, omit `faintr_private`, and need the matching schema/migrations separately. Keep your backup passphrase in your password manager; it is required even when moving to a new project.
 
 Trainers can also download their own Roster any time from the Roster tab (**Export**).
 
@@ -214,6 +217,10 @@ Trainers can also download their own Roster any time from the Roster tab (**Expo
 - Keep these out of the code and out of chat: the Supabase `secret`/`service_role` key, your database password, the Cloudflare token, the GitHub token and the backup passphrase. They only go in GitHub Secrets or Supabase secrets.
 
 ## If something goes wrong
+
+**FAINTR operations alerts** opens one GitHub issue assigned to the repository owner when the site update, database backup/recovery or Discord rankings fail. It links to the run, includes no logs or customer data, updates the existing issue on repeated failures, and closes it after a successful real run (the unused daylight-saving schedule does not count as recovery). GitHub delivers notifications according to the owner's notification/email settings. Cancellations and completely missing/disabled scheduled runs do not create an issue.
+
+Every site publication now passes the built-site browser checks in `tests/release/` plus sharing checks first. Chrome desktop, Android-sized screens, a 320px screen and Safari's WebKit engine cover scores, names/moves, visible grades, sections, dialogs, Anti-Meta, sharing and failed startup. These isolated browsers use synthetic/local storage only and block external account writes; actual OAuth sign-in is outside this gate.
 
 | What you see | What to check |
 | --- | --- |

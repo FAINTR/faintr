@@ -299,7 +299,10 @@ ul.tight li { margin: 2px 0; }
 .changes .panel { padding: 12px 14px; }
 .changes h4 { margin: 0 0 6px; font-size: 15px; }
 .saved { display: flex; flex-direction: column; gap: 10px; }
-.saved .panel { padding: 16px; display: grid; grid-template-columns: 1fr auto; gap: 10px 16px; align-items: center; }
+.saved .panel { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; align-items: center; }
+.saved .panel > div { min-width: 0; }
+.savedgrades { display: flex; flex-wrap: wrap; gap: 8px 3px; margin-top: 8px; }
+.saved h4, .saved .note { overflow-wrap: anywhere; }
 .saved h4 { margin: 0; font-size: 17px; }
 .history { font-size: 13px; color: var(--muted); }
 .chg.up { color: var(--pos); font-weight: 600; } .chg.down { color: var(--accent-text); font-weight: 600; }
@@ -364,7 +367,7 @@ aside.filters { top: 128px; max-height: calc(100vh - 146px); }
 .rtools input[type="search"] { min-width: 200px; }
 .rtools select { width: auto; }
 #rNote { min-height: 20px; margin: 4px 2px 10px; }
-.rgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; }
+.rgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr)); gap: 12px; }
 .rgrid > .empty { grid-column: 1 / -1; }
 .rcard { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
 .rtop { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; }
@@ -718,6 +721,10 @@ nav.tabs #vipTab[aria-selected="true"]::after { background: var(--fr-amber); }
 .authalt .btn:first-child:not([hidden]) + .googlebtn { margin-top: 8px; }
 @media (max-width: 760px) {
   header.top { position: static; } /* the full header would cover too much of a phone screen */
+  .saved .panel { grid-template-columns: minmax(0, 1fr); }
+  .saved .savedright { justify-content: space-between; flex-wrap: wrap; }
+  .lrow { grid-template-columns: 45px minmax(0, 1fr) 50px; }
+  .lrow .st { grid-column: 2 / -1; }
   aside.filters { top: 0; }
   .card { flex-wrap: wrap; row-gap: 8px; max-width: 100%; }
   .tile { width: 30px; }

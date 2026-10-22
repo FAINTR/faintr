@@ -46,11 +46,10 @@ jobs:
           CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           if [ -z "$CF_TOKEN" ] || [ -z "$CF_ACCOUNT" ]; then
-            echo "Cloudflare settings aren't configured yet; skipping publication."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Cloudflare settings aren't configured; publication cannot continue."
             echo "### Setup required" >> "$GITHUB_STEP_SUMMARY"
             echo "Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in repository secrets, then run this workflow again." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+            exit 1
           fi
           if [ "${{ github.event_name }}" = "schedule" ]; then
             off=$(TZ=America/Chicago date +%z)
@@ -127,7 +126,27 @@ jobs:
 
       - name: Verify team sharing
         if: steps.gate.outputs.skip != 'true'
-        run: node tools/test-sharing.cjs
+        run: |
+          node tools/test-sharing.cjs
+          node --test tools/operations-alerts.test.cjs
+
+      - name: Install release-check browsers
+        if: steps.gate.outputs.skip != 'true'
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Check desktop, mobile and Safari before publishing
+        if: steps.gate.outputs.skip != 'true'
+        run: npx playwright test
+
+      - name: Save release-check report
+        if: failure() && steps.gate.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-check-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
 
       - name: Save built data
         if: always() && steps.gate.outputs.skip != 'true'

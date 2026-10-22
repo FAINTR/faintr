@@ -1243,10 +1243,10 @@ function renderIvFamily() {
   box.hidden = false;
   const idx = new Map(fam.map((f, k) => [f.id, k]));
   box.innerHTML = `<h3 style="margin:0 0 6px">The whole family in ${LEAGUE_NAME[cp]} League</h3><p class="hint">The same IVs carry through evolution. "Evolve at" is the CP an earlier stage shows at the level where this one is best, so you can power up before evolving without passing the cap.</p>
-    <table class="t"><thead><tr><th>Pokémon</th><th class="n">Rank</th><th class="n">Stat product</th><th class="n">Level</th><th class="n">CP</th><th>Evolve at</th></tr></thead><tbody>
+    <div class="scroll" tabindex="0" role="region" aria-label="Evolution family IVs; scroll horizontally if needed"><table class="t"><thead><tr><th>Pokémon</th><th class="n">Rank</th><th class="n">Stat product</th><th class="n">Level</th><th class="n">CP</th><th>Evolve at</th></tr></thead><tbody>
     ${fam.map((f) => { const short = cp < 10000 && f.cp < cp * 0.94; const pre = f.atLevel.filter((a) => idx.get(a.id) < idx.get(f.id));
       return `<tr class="${f.id === IVS.p.id ? 'me' : ''}"><td><b>${esc(f.name)}</b></td><td class="n">${short ? '<span class="note">can\'t reach cap</span>' : f.rank === 1 ? `1 ${STAR}` : fmt(f.rank)}</td><td class="n">${f.pctOfBest.toFixed(1)}%</td><td class="n">${f.level}</td><td class="n">${fmt(f.cp)}</td>
-        <td class="note">${pre.length && !short ? pre.map((a) => `${esc(a.name)} CP ${fmt(a.cp)}`).join(' · ') : ''}</td></tr>`; }).join('')}</tbody></table>`;
+        <td class="note">${pre.length && !short ? pre.map((a) => `${esc(a.name)} CP ${fmt(a.cp)}`).join(' · ') : ''}</td></tr>`; }).join('')}</tbody></table></div>`;
 }
 function renderIvTable() {
   const t = IVS.table; if (!t) return;
@@ -1325,7 +1325,7 @@ async function loadSaved() {
     }).join('') : '';
     const diff = cur && prev ? cur.composite - prev.composite : 0;
     return `<div class="panel" data-id="${t.id}"><div><h4>${esc(t.name)} <span class="fmtchip">${esc(t.title || 'Great League')}</span></h4><div class="note">${t.members.map((m) => esc(names.get(m.id) || m.id) + (m.ivs ? ` (${m.ivs.atk}/${m.ivs.def}/${m.ivs.hp})` : '')).join(', ')}</div>
-        <div style="display:flex;gap:3px;margin-top:8px">${tiles}</div>
+        <div class="savedgrades">${tiles}</div>
         <div class="history" style="margin-top:6px">${prev ? `<span class="chg ${diff > 0 ? 'up' : diff < 0 ? 'down' : ''}">${diff >= 0 ? '+' : ''}${diff.toFixed(1)} since the last update.</span> ` : ''}Graded ${h.length} time${h.length === 1 ? '' : 's'}, latest on data from ${esc(cur ? fmtVersion(cur.version) : '—')}.</div></div>
       <div class="savedright">${cur ? scoreBadge(cur.composite, t.tier, null, t.title) : ''}<div class="actions" style="margin:0"><button class="btn primary openSaved" type="button">Open in grader</button><button class="btn quiet delSaved" type="button">Delete</button></div></div></div>`;
   }).join('');

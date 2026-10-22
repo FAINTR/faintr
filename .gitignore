@@ -4,6 +4,11 @@ site/
 site.new/
 .webcache/
 .discord-state/
+playwright-report/
+test-results/
+__pycache__/
+*.dump
+*.dump.gpg
 *.log
 .env
 .env.*
