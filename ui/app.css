@@ -1,4 +1,19 @@
 /* FAINTR — follows docs/FAINTR_BRAND_GUIDE.md */
+/* Sharing sits next to existing tools; no onboarding or blocked first visit. */
+.team-share-row{display:flex;justify-content:flex-end;padding:0 16px 12px;gap:8px}
+.shared-team-note{margin:0 0 18px;padding:16px 20px;border-left:4px solid var(--red,#D7263D)}
+.shared-team-note .actions{align-items:center;flex-wrap:wrap;margin:10px 0 0}
+.team-share-dialog{width:min(680px,calc(100vw - 32px));max-height:90vh;overflow:auto;border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--ink);padding:24px;box-sizing:border-box}
+.team-share-dialog::backdrop{background:rgba(0,0,0,.65)}
+.team-share-dialog h2{margin:0;font-size:24px}
+.share-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:10px}
+.team-share-dialog img{display:block;width:100%;height:auto;border-radius:10px;margin:18px 0;background:#20232C;aspect-ratio:1200/630}
+.team-share-dialog label{display:block;margin:14px 0 6px}
+.team-share-dialog input{width:100%;box-sizing:border-box;min-width:0}
+.team-share-dialog .actions{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 10px}
+.team-share-dialog .note{line-height:1.5}
+@media(max-width:560px){.team-share-dialog{padding:18px}.team-share-dialog .actions .btn{flex:1 1 auto}.team-share-row .btn{min-height:40px}}
+
 @font-face { font-family: 'Inter'; font-weight: 400; font-display: swap; src: url(/static/fonts/inter-latin-400-normal.woff2) format('woff2'); }
 @font-face { font-family: 'Inter'; font-weight: 500; font-display: swap; src: url(/static/fonts/inter-latin-500-normal.woff2) format('woff2'); }
 @font-face { font-family: 'Inter'; font-weight: 600; font-display: swap; src: url(/static/fonts/inter-latin-600-normal.woff2) format('woff2'); }
@@ -687,3 +702,5 @@ nav.tabs #vipTab[aria-selected="true"]::after { background: var(--fr-amber); }
   .tile { width: 30px; }
   .card .set + .set { padding-left: 6px; }
 }
+
+#changelog{max-width:880px;margin-inline:auto;padding:24px 28px}#changelog h2{margin-top:24px;font-size:22px}#changelog li{margin:12px 0;line-height:1.65}#changelog p{line-height:1.65}

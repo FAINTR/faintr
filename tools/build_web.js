@@ -204,7 +204,7 @@ function webTeams(dir) {
   return { info: D.info, bin: zlib.gzipSync(bin, { level: 9 }), nTeams: D.n };
 }
 
-function assemble(src, version, built, formats) {
+async function assemble(src, version, built, formats) {
   log('Assembling the site');
   const tmp = OUT + '.new';
   fs.rmSync(tmp, { recursive: true, force: true });
@@ -295,12 +295,14 @@ function assemble(src, version, built, formats) {
   fs.copyFileSync(require.resolve('@supabase/supabase-js/dist/umd/supabase.js', { paths: [ROOT] }), path.join(tmp, 'static/vendor/supabase.js'));
   fs.copyFileSync(path.join(ROOT, 'web/bridge.js'), path.join(tmp, 'static/bridge.js'));
   esbuild.buildSync({ stdin: { contents: 'window.FAINTR_VIP_TOOLS = require("./viptools");', resolveDir: ROOT }, bundle: true, platform: 'browser', format: 'iife', outfile: path.join(tmp, 'static/viptools.js'), minify: true });
+  fs.copyFileSync(path.join(ROOT, 'web/share-codec.js'), path.join(tmp, 'static/share-codec.js'));
   fs.copyFileSync(path.join(ROOT, 'metrics.js'), path.join(tmp, 'metrics.js'));
   fs.copyFileSync(path.join(ROOT, 'CHANGELOG.md'), path.join(tmp, 'changelog.md'));
   const v = (rel) => sha(fs.readFileSync(path.join(tmp, rel))).slice(0, 10);
   let html = fs.readFileSync(path.join(ROOT, 'ui/index.html'), 'utf8');
   html = html.replace('<!--WEB-HEAD-->', `<meta name="description" content="FAINTR: Pokémon GO PvP team builder, team grader, IV ranks and Anti-Meta teams, built on PvPoke's battle simulator.">
-<meta property="og:title" content="FAINTR: Win the matchup"><meta property="og:description" content="Pokémon GO PvP teams that actually win, ranked and graded on PvPoke's battle engine."><meta name="theme-color" content="#2B2F3A">`)
+<link rel="canonical" href="https://faintr.com/"><meta property="og:type" content="website"><meta property="og:title" content="FAINTR: Win the matchup"><meta property="og:description" content="Free Pokémon GO PvP team tools, built on PvPoke's battle simulator."><meta property="og:image" content="https://faintr.com/static/faintr-preview.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://faintr.com/static/faintr-preview.png"><meta name="theme-color" content="#2B2F3A">`)
+    .replace('<!--SHARE-SCRIPT-->', '<script src="/static/share-codec.js"></script>')
     .replace('<!--WEB-SCRIPTS-->', `<script src="/static/vendor/supabase.js?v=${v('static/vendor/supabase.js')}"></script>\n<script src="/static/viptools.js?v=${v('static/viptools.js')}"></script>\n<script src="/static/bridge.js?v=${v('static/bridge.js')}"></script>`)
     .replace(/(href|src)="\/(static\/[^"?]+\.(?:css|js|svg)|metrics\.js)"/g, (m, attr, rel) => `${attr}="/${rel}?v=${v(rel)}"`);
   fs.writeFileSync(path.join(tmp, 'index.html'), html);
@@ -315,8 +317,24 @@ function assemble(src, version, built, formats) {
     '/static/*', '  Cache-Control: public, max-age=86400', '',
     // 'unsafe-eval': PvPoke's engine and FAINTR's grading code are evaluated inside the workers
     '/*', '  X-Content-Type-Options: nosniff', '  Referrer-Policy: strict-origin-when-cross-origin', '  X-Frame-Options: DENY',
-    `  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-eval'; worker-src 'self'; connect-src 'self'${cfg.supabaseUrl ? ` ${cfg.supabaseUrl} ${cfg.supabaseUrl.replace(/^https/, 'wss')}` : ''}; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'`, '',
+    `  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-eval' https://static.cloudflareinsights.com; worker-src 'self'; connect-src 'self' https://cloudflareinsights.com${cfg.supabaseUrl ? ` ${cfg.supabaseUrl} ${cfg.supabaseUrl.replace(/^https/, 'wss')}` : ''}; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'`, '',
   ].join('\n'));
+  // Sharing is stateless: the validated team travels in the URL, never Supabase.
+  const shareGm=readJ(path.join(src,'data/gamemaster.json'));
+  const pokemon={};
+  for(const p of shareGm.pokemon){
+    const value={name:p.speciesName,types:p.types,fast:p.fastMoves||[],charged:p.chargedMoves||[]};
+    pokemon[p.speciesId]=value;
+    if(p.shadow){pokemon[p.speciesId+'_shadow']={...value,name:p.speciesName+' (Shadow)',charged:[...value.charged,'FRUSTRATION','RETURN']};}
+  }
+  const shareMetadata={formats:Object.fromEntries(formats.map(f=>[f.key,f.title])),pokemon,moves:Object.fromEntries(shareGm.moves.map(m=>[m.moveId,m.name])),csp:fs.readFileSync(path.join(tmp,'_headers'),'utf8').split('Content-Security-Policy: ')[1].split('\n')[0]};
+  const sharedWorker=(await esbuild.build({entryPoints:[path.join(ROOT,'web/share-worker.js')],bundle:true,platform:'browser',format:'esm',minify:true,write:false,plugins:[{name:'share-metadata',setup(build){build.onResolve({filter:/share-metadata\.json$/},()=>({path:'share-metadata',namespace:'faintr'}));build.onLoad({filter:/.*/,namespace:'faintr'},()=>({contents:JSON.stringify(shareMetadata),loader:'json'}));}}]})).outputFiles[0].contents;
+  fs.writeFileSync(path.join(tmp,'_worker.js'),sharedWorker);
+  fs.writeFileSync(path.join(tmp,'_routes.json'),JSON.stringify({version:1,include:['/share/*'],exclude:[]}));
+  const imageCode=esbuild.buildSync({entryPoints:[path.join(ROOT,'web/share-image.js')],bundle:true,platform:'node',format:'cjs',write:false}).outputFiles[0].text;
+  const imageModule={exports:{}};new Function('module','exports',imageCode)(imageModule,imageModule.exports);
+  const preview=await imageModule.exports.renderCard({format:'Pokemon GO PvP'});
+  fs.writeFileSync(path.join(tmp,'static/faintr-preview.png'),Buffer.from(await preview.arrayBuffer()));
   // Single-page app: unknown paths show the app
   fs.writeFileSync(path.join(tmp, '_redirects'), '/changelog /changelog.md 302\n');
   fs.rmSync(OUT, { recursive: true, force: true });
@@ -337,7 +355,7 @@ function assemble(src, version, built, formats) {
   const built = await buildFormats(src, version, formats);
   const counts = built.reduce((a, r) => { a[r.state] = (a[r.state] || 0) + 1; return a; }, {});
   log('Formats:', Object.entries(counts).map(([k, n]) => `${n} ${k}`).join(', '));
-  assemble(src, version, built, formats);
+  await assemble(src, version, built, formats);
   // For the GitHub Action summary
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### FAINTR data ${version}\n\n| Format | Result |\n|---|---|\n${built.map((r) => `| ${r.F.title} | ${r.state}${r.ok ? '' : ' (no teams yet)'} |`).join('\n')}\n\nTook ${((Date.now() - t0) / 60000).toFixed(1)} minutes.\n`);
   log(`Done in ${((Date.now() - t0) / 60000).toFixed(1)} min`);

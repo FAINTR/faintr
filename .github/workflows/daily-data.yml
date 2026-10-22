@@ -125,6 +125,10 @@ jobs:
           if [ -n "$FORMATS" ]; then args+=(--formats "$FORMATS"); fi
           node tools/build_web.js "${args[@]}"
 
+      - name: Verify team sharing
+        if: steps.gate.outputs.skip != 'true'
+        run: node tools/test-sharing.cjs
+
       - name: Save built data
         if: always() && steps.gate.outputs.skip != 'true'
         uses: actions/cache/save@v4

@@ -259,10 +259,12 @@ function renderTeams(teams, owned) {
     el.innerHTML = `<div class="empty">${owned ? `No team of three from your Roster clears every filter in ${esc(title())}. You need at least three different Pokémon from its top 150; lower a minimum grade or add more to your Roster.` : 'No team clears every filter. Lower a minimum grade or drop a must-include.'}</div>`;
     return;
   }
+  S.visibleTeams = teams;
   el.innerHTML = teams.map((t, n) => `<article class="team panel" data-i="${t.i}">
       <button class="head" type="button" aria-expanded="false"><span class="rank">${n + 1}</span>
         <span class="members">${t.members.map((m, k) => monCell(m, t.roles[k])).join('')}</span>${card(t.grades)}
         ${S.anti && S.fmt.anti ? antiBadge(t.anti) : scoreBadge(t.composite, t.tier)}</button>
+      ${WEB ? '<div class="team-share-row"><button class="btn small quiet shareListBtn" type="button">Share team</button></div>' : ''}
       <div class="quick" hidden></div></article>`).join('');
 }
 // Anti-Meta score: share of games won against the meta field, on the same five-step color scale
@@ -293,6 +295,10 @@ function quickHTML(d) {
 $('#teams').addEventListener('click', async (e) => {
   const art = e.target.closest('.team'); if (!art) return;
   const q = $('.quick', art);
+  if(e.target.closest('.shareListBtn')) {
+    try { const detail=q._d || await api('/api/team?i='+art.dataset.i); await shareTeam(detail.input); }
+    catch(err){showToast(err.message);} return;
+  }
   if (e.target.closest('.head')) {
     const open = q.hidden; q.hidden = !open; $('.head', art).setAttribute('aria-expanded', open);
     if (open && !q._d) {
@@ -1317,7 +1323,7 @@ function md(text) {
   const inline = (x) => esc(x).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`(.+?)`/g, '<code>$1</code>');
   let html = '', depth = 0;
   const closeTo = (d) => { while (depth > d) { html += '</li></ul>'; depth--; } };
-  for (const line of text.split('\n')) {
+  for (const line of text.split(/\r?\n/)) {
     const m = /^(\s*)- (.*)$/.exec(line);
     if (m) {
       const d = Math.floor(m[1].length / 2) + 1;
@@ -1683,6 +1689,10 @@ async function loadInfo() {
   const liveFirst = S.info.live && S.info.live.now ? S.info.live.now.formats[0].key : 'all-1500';
   S.f = saved && store.get('faintr.period') === period && S.info.formats.some((f) => f.key === saved) ? saved : liveFirst;
   store.set('faintr.period', period);
+  // A shared link selects its league before downloading team data.
+  if(WEB && /^\/share\/[^/]+$/.test(location.pathname)) {
+    try { const shared=window.FAINTR_SHARE.decode(location.pathname.split('/')[2]); if(S.info.formats.some(f=>f.key===shared.f))S.f=shared.f; } catch(_) { /* restoreSharedTeam shows a readable error */ }
+  }
   S.fmt = await api('/api/format', undefined); S._cat = null;
   S.ownedOnly = store.get('faintr.ownedOnly') === '1';
   $('#ownedOnly').checked = S.ownedOnly;
@@ -1700,6 +1710,7 @@ async function loadInfo() {
   await loadRoster();
   await setFormat(S.f, true);
   S.booted = true;
+  if (WEB) { $('#shareGradeBtn').hidden=false; await restoreSharedTeam(); }
   if (WEB) { $('#loader').hidden = true; api('/core/regrade', {}, { noF: true }).then(async () => {
     if (window.FAINTR_BRIDGE.state.user) { VIPUI.alerts=await api('/api/vip/alerts',undefined,{noF:true}); renderVipAlerts(); const count=VIPUI.alerts.filter(a=>!a.read).length; if (count) showToast(`${count} saved team${count===1?' has':'s have'} changed.`,{label:'View alerts',run:()=>showView('vip')}); }
   }).catch(() => {}); api('/core/refresh-roster', {}, { noF: true }).then(() => loadRoster()).catch(() => {}); }
@@ -1711,3 +1722,74 @@ async function loadInfo() {
   $('#loaderProg').hidden = true;
   $('#loaderNote').textContent = `${e.message} Try reloading the page.`;
 });
+
+/* Share a public game setup; keep accounts, nicknames and saved-team notes private. */
+let shareBusy=false;
+async function shareTeam(members,format=S.f) {
+  if(shareBusy)return;
+  if(members.length!==3 || members.some(m=>!m)){showToast('Pick all three Pokemon before sharing.');return;}
+  shareBusy=true;
+  try {
+    const snapshot=members.map(m=>({...m,moveset:m.moveset&&m.moveset.slice(),ivs:m.ivs&&{...m.ivs}}));
+    const exact=await Promise.all(snapshot.map(async m=>{
+      const iv=m.ivs?m.ivs:(await api('/api/iv',{...m,f:format})).ivs;
+      return {id:m.id,moveset:m.moveset,ivs:iv,levelCap:m.levelCap||50};
+    }));
+    const token=window.FAINTR_SHARE.encode({v:1,f:format,m:exact,w:{...S.weights}});
+    const url='https://faintr.com/share/'+token;
+    const dialog=$('#teamShareDialog');
+    $('#teamShareLink').value=url;
+    $('#sharePreview').src='/share/'+token+'/image.png';
+    $('#sharePreview').alt='Team card for '+exact.map(m=>catalogById().get(m.id)?.name||m.id).join(', ');
+    $('#sharePreview').hidden=false;$('#shareMessage').textContent='';
+    $('#sharePreview').onerror=()=>{$('#sharePreview').hidden=true;$('#shareMessage').textContent='The preview could not load. You can still copy the team link.';};
+    $('#nativeShareBtn').hidden=!navigator.share;
+    dialog.showModal();
+  } catch(e){showToast(e.message||'Could not prepare this team. Please try again.');}
+  finally{shareBusy=false;}
+}
+$('#closeShareBtn').addEventListener('click',()=>$('#teamShareDialog').close());
+$('#teamShareDialog').addEventListener('click',e=>{if(e.target===$('#teamShareDialog')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}});
+$('#copyTeamLinkBtn').addEventListener('click',async()=>{
+  try{await navigator.clipboard.writeText($('#teamShareLink').value);$('#shareMessage').textContent='Team link copied. Paste it into Discord or send it to a friend.';}
+  catch(_){$('#teamShareLink').focus();$('#teamShareLink').select();$('#shareMessage').textContent='Select and copy the link above.';}
+});
+$('#nativeShareBtn').addEventListener('click',async()=>{
+  try{await navigator.share({title:'My FAINTR team',url:$('#teamShareLink').value});}
+  catch(e){if(e.name!=='AbortError')$('#shareMessage').textContent='Sharing is unavailable here. Copy the link instead.';}
+});
+$('#downloadTeamBtn').addEventListener('click',async e=>{
+  const button=e.currentTarget;button.disabled=true;$('#shareMessage').textContent='Preparing your team image…';
+  try{
+    const response=await fetch($('#sharePreview').src);
+    if(!response.ok || !response.headers.get('Content-Type')?.startsWith('image/png'))throw Error('The image could not be downloaded. Please try again.');
+    const url=URL.createObjectURL(await response.blob()),a=document.createElement('a');
+    a.href=url;a.download='FAINTR-team.png';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+    $('#shareMessage').textContent='Team image downloaded. You can attach it to your post along with the link.';
+  }catch(e){$('#shareMessage').textContent=e.message;}finally{button.disabled=false;}
+});
+$('#shareGradeBtn').addEventListener('click',()=>shareTeam(slots.map(s=>s.value())));
+$('#sharedReplaceBtn').addEventListener('click',()=>{
+  const i=Number($('#sharedReplaceSlot').value);slots[i].clear();
+  $('#gradeStatus').textContent='Choose another '+ROLES[i].toLowerCase()+', or use Find the rest to suggest a replacement.';
+  lastReport=null;$('#saveBtn').disabled=true;$('#gradeResult').innerHTML=GRADER_EMPTY;
+  $('#slots .slot:nth-child('+(i+1)+') input').focus();
+});
+async function restoreSharedTeam(){
+  const match=/^\/share\/([^/]+)$/.exec(location.pathname);
+  if(!WEB||!match)return;
+  try{
+    const team=window.FAINTR_SHARE.decode(match[1]);
+    if(!S.info.formats.some(f=>f.key===team.f))throw Error('This shared league or cup is no longer available. Choose another at the top.');
+    if(team.f!==S.f)await setFormat(team.f);
+    for(const m of team.m){
+      const p=catalogById().get(m.id);
+      if(!p || m.moveset.some((move,i)=>!(i===0?p.fast:p.charged).some(([id])=>id===move)))throw Error('A shared Pokemon or move is no longer available in this league.');
+    }
+    // Validate the whole setup before changing any slots. Never substitute roster IVs.
+    S.weights={...S.info.weights,...team.w};syncFilters();
+    loadIntoGrader(team.m);$('#sharedTeamNote').hidden=false;showView('grade');
+    $('#gradeStatus').textContent='Shared team loaded with its moves and IVs. Grade it to check current matchups.';
+    // Opening a link stays light: expensive simulations run only when requested.
+  }catch(e){showToast(e.message);}
+}

@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/config.js"></script>
 <script src="/metrics.js"></script>
+<!--SHARE-SCRIPT-->
 <!--WEB-HEAD-->
 </head>
 <body>
@@ -102,11 +103,17 @@
   <!-- Team Grader -->
   <section class="view" id="view-grade">
     <div class="viewhead"><h1>Team Grader</h1><p id="gradeLede">Pick three Pokémon, their moves and your IVs, or load them from your Roster. We battle each one against every Pokémon in the league at 0, 1 and 2 shields, then show you what the team does well, what beats it, and how to play it.</p></div>
+    <div id="sharedTeamNote" class="shared-team-note panel" hidden>
+      <strong>A team someone shared with you</strong>
+      <p class="note">The same Pokémon, moves, IVs and league are loaded below. Results use the latest available game data.</p>
+      <div class="actions"><label for="sharedReplaceSlot">Try a different</label><select id="sharedReplaceSlot"><option value="0">Lead</option><option value="1">Safe swap</option><option value="2">Closer</option></select><button class="btn" id="sharedReplaceBtn" type="button">Try a replacement</button></div>
+    </div>
     <div class="slots" id="slots"></div>
     <div class="gradebar">
       <button class="btn primary" id="gradeBtn" type="button">Grade team</button>
       <button class="btn" id="fillBtn" type="button">Find the rest</button>
       <button class="btn" id="saveBtn" type="button" disabled>Save to My Teams</button>
+      <button class="btn" id="shareGradeBtn" type="button" hidden>Share team</button>
       <button class="btn quiet" id="clearBtn" type="button">Clear</button>
       <span class="note" id="gradeStatus"></span>
     </div>
@@ -385,6 +392,15 @@
 
 
 <div class="toast" id="toast" role="status" hidden></div>
+<dialog id="teamShareDialog" class="team-share-dialog" aria-labelledby="teamShareTitle">
+  <div class="share-dialog-head"><h2 id="teamShareTitle">Share this team</h2><button class="btn quiet small" id="closeShareBtn" type="button" aria-label="Close sharing">Close</button></div>
+  <p class="note">Send a link to open this exact team, or download its card to attach to a post.</p>
+  <img id="sharePreview" alt="Your FAINTR team card" width="1200" height="630" hidden>
+  <label for="teamShareLink">Team link</label><input id="teamShareLink" readonly type="text" spellcheck="false">
+  <div class="actions"><button id="copyTeamLinkBtn" class="btn primary" type="button">Copy link</button><button id="downloadTeamBtn" class="btn" type="button">Download image</button><button id="nativeShareBtn" class="btn quiet" type="button" hidden>Share…</button></div>
+  <p id="shareMessage" class="note" role="status" aria-live="polite"></p>
+  <p class="note">Anyone with the link can see these Pokémon, moves, IVs and settings. Your account, private roster and notes stay private. Link previews depend on the app you share to.</p>
+</dialog>
 <!--WEB-SCRIPTS-->
 <script src="/static/app.js"></script>
 </body>
