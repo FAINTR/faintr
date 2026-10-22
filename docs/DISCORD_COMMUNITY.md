@@ -7,10 +7,12 @@ The community is for free FAINTR tools and Pokémon GO PvP discussion. Patreon i
 - START HERE: welcome, rules, announcements, support-faintr.
 - COMMUNITY: general, pvp-hangout, introductions, team-building, battle-results, ideas-and-feedback, help-and-bugs.
 - RANKINGS: top-10-meta-teams and top-10-anti-meta-teams. Members can read and react, but cannot post, create/reply in threads, or post through external apps.
-- STAFF: dev-only. @everyone is denied View Channel; existing ADMIN and CoFounder roles are allowed. Existing administrators retain Discord's normal permission bypass. Do not assign these roles through onboarding.
+- STAFF: dev-only and mod-alerts. @everyone is denied View Channel; existing ADMIN and CoFounder roles are allowed. Existing administrators retain Discord's normal permission bypass. Do not assign these roles through onboarding.
 - Existing General voice channel is retained.
 
 Native Community and Onboarding are enabled. Site-news alerts are opt-in through Channels & Roles; the Announcement Alerts role has no extra permissions. New members get a welcome sign and tasks to introduce themselves, share a team/question, and find help. The rules remain visible and public channels are available through defaults or customization. No third-party moderation bot is required.
+
+Verified email, sensitive-media filtering for all members, native raid/DM protections, and restricted member pruning are enabled. AutoMod blocks mention spam (8 unique mentions), suspected spam, and the native Insults & Slurs / Sexual Content word lists. All three rules send private alerts to mod-alerts. Discord safety notices also go there; Discord's Community administration updates go to dev-only. Team-building and help templates are pinned. Existing messages and staff assignments were preserved.
 
 ## Daily Top 10 publisher
 
@@ -24,6 +26,8 @@ Two repository secrets are required:
 These posting credentials are private. Never commit them, paste them into chat, include them in screenshots, or put them in website configuration. Each can post in its own public ranking channel; neither needs access to member accounts, private rosters, or dev-only.
 
 The publisher reads the **deployed public** `https://faintr.com/manifest.json` and its hashed team datasets. It uses the same codec, default team scoring, and Anti-Meta query as the website. It posts all three built leagues plus currently active built cups; future cups are excluded. Full Pokémon and move names, role order, score, grade letters, and source-data timestamps are preserved. Simulation estimates are labeled. Off-rotation league datasets may be older; each post shows when its data was built.
+
+The initial quiet delivery passed on October 22, 2026: Great, Ultra, Master, Mega Master, and Fantasy Cup were delivered to both feeds, without mass pings. [Successful verification run](https://github.com/FAINTR/faintr/actions/runs/39863558837). Eight publisher tests passed, and Discord's @everyone preview confirmed both feeds are read-only and staff channels are hidden.
 
 As requested by the owner, each feed gets **one @everyone ping per daily digest**, on its first league message. The remaining league/cup messages permit no mentions. This is separate from optional site-news notifications. New ranking posts are added daily so discussions can refer back to a dated snapshot. A manual workflow run also publishes the day's digest and should only be used when a post is desired.
 
