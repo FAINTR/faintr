@@ -1,0 +1,24 @@
+name: Enable free website access
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: faintr-vip-setup
+  cancel-in-progress: false
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    container: postgres:17
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove payment requirements while preserving account privacy
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/005_free_access.sql
+      - name: Verify free access and private storage with real database roles
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/verify_free_access.sql

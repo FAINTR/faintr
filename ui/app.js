@@ -22,7 +22,7 @@ const title = () => (S.fmt ? S.fmt.title : 'Great League');
 
 const WEB = !!window.FAINTR_BRIDGE; // the website runs the engine in the browser; the desktop app has a local server
 const CFG = window.FAINTR_CONFIG || {};
-const PREMIUM = WEB && window.FAINTR_BRIDGE.billing.enabled;
+const PREMIUM = false;
 function hasPremium() { return !PREMIUM || window.FAINTR_BRIDGE.billing.hasAccess(); }
 function needPremium() { if (hasPremium()) return false; openPremium(); return true; }
 async function api(path, body, opts = {}) {
@@ -1409,10 +1409,6 @@ syncThemeBtn();
 // Discord and Patreon links come from config.js
 [['#discordBtn', 'discordUrl'], ['#discordBtn2', 'discordUrl'], ['#patreonBtn', 'patreonUrl']].forEach(([sel, key]) => {
   const a = $(sel); if (!a) return;
-  if (WEB && key === 'patreonUrl' && !CFG.patreonReady) {
-    a.href = '#'; a.removeAttribute('target'); a.title = 'Patreon setup in progress';
-    a.addEventListener('click', e => { e.preventDefault(); showView('vip'); showToast('Patreon memberships are being connected. New signups are paused.'); }); return;
-  }
   if (CFG[key]) a.href = CFG[key];
   else { a.href = '#'; a.title = 'Link coming soon'; a.addEventListener('click', (e) => { e.preventDefault(); showToast('That link is coming soon.'); }); }
 });
@@ -1468,13 +1464,14 @@ function renderBattleLog() {
 function renderVipAlerts() {
   const unread = VIPUI.alerts.filter(a => !a.read).length;
   $('#vipAlertCount').textContent = unread ? `(${unread})` : '';
-  $('#vipTab').textContent = unread ? `VIP · ${unread}` : 'VIP';
+  $('#vipTab').textContent = unread ? `Battle tools · ${unread}` : 'Battle tools';
   $('#vipAlertList').innerHTML = VIPUI.alerts.length ? VIPUI.alerts.map(a => `<article class="vipalert ${a.read ? '' : 'unread'}"><h3>${esc(a.name)} <span class="fmtchip">${esc(S.info.formats.find(f=>f.key===a.format)?.title || a.format)}</span></h3><p>Overall score ${a.delta >= 0 ? '+' : ''}${a.delta.toFixed(1)} since the previous data version.</p><p class="note">${a.changes.map(c=>`${esc(G[c.key]?.label || c.key)}: ${esc(c.from)} → ${esc(c.to)}`).join(' · ') || 'The overall score changed; letter grades stayed the same.'}</p><p class="note">${esc(fmtVersion(a.from))} → ${esc(fmtVersion(a.to))}${a.read ? ' · Read' : ' · New'}</p><button class="btn small" type="button" data-goto="saved">Review My Teams</button></article>`).join('') : '<p class="empty">No changes to report. Save teams in My Teams; their grade changes will appear here after a data update.</p>';
 }
 async function loadVip() {
-  if (!PREMIUM || !hasPremium()) return;
+  if (!WEB) return;
+  if (!window.FAINTR_BRIDGE.state.user) { $('#battleLogStatus').textContent = 'Sign in to save your battle log and use your roster across devices. All tools are free.'; $('#battleLogForm button').disabled = true; return; }
   const seq = ++VIPUI.seq;
-  $('#battleLogStatus').textContent = 'Loading your VIP tools…';
+  $('#battleLogStatus').textContent = 'Loading your battle tools…';
   try {
     const [battles, teams, alerts] = await Promise.all([api('/api/vip/battles', undefined, {noF:true}), api('/api/saved',undefined,{noF:true}), api('/api/vip/alerts',undefined,{noF:true})]);
     if (seq !== VIPUI.seq || !hasPremium()) return;
@@ -1493,30 +1490,13 @@ async function loadVip() {
   } catch (err) { if (seq === VIPUI.seq) $('#battleLogStatus').textContent = err.message; }
 }
 function syncPremium() {
-  if (!PREMIUM) return;
-  const B = window.FAINTR_BRIDGE, member = B.state.membership, paid = hasPremium();
-  $('#premiumBtn').hidden = false;
-  $('#premiumBtn').textContent = paid ? 'VIP active' : 'Get VIP';
+  if (!WEB) return;
   $('#vipTab').hidden = false;
-  $('#premiumPlans').hidden = paid;
-  $('#premiumManage').hidden = !B.state.user;
-  $('#premiumRefresh').hidden = !B.state.user;
-  $('#authBilling').hidden = false; $('#authExport').hidden = false;
-  $('#authIntro').textContent = 'Sign in to link your Patreon membership and use VIP across your devices. Team search, grading, matchups and IV tools are free.';
-  $('#premiumMembership').textContent = paid ? 'Your VIP access is active.' : (B.config.patreonReady ? 'One Patreon membership unlocks every VIP feature.' : 'We’re connecting Patreon. New VIP signups are paused while we finish setup.');
-  $('#premiumNotice').hidden = paid;
-  $('#vipMembership').textContent = paid ? $('#premiumMembership').textContent : '';
-  $('#vipPlanCards').hidden = paid;
-  $('#vipManage').hidden = !B.state.user; $('#vipRefresh').hidden = !B.state.user;
-  $('#vipHero').hidden = paid; $('#vipBenefits').hidden = paid; $('#vipPlans').hidden = paid; $('#vipDashboard').hidden = !paid;
-  if (!paid && S.anti) { S.anti = false; store.set('faintr.anti', ''); if (S.fmt) renderFormatBar(); }
+  $('#authExport').hidden = false;
+  $('#authIntro').textContent = 'All tools are free. Sign in to keep your roster, saved teams and battle history private and synced across devices.';
 }
-function openPremium() {
-  if (!PREMIUM) return;
-  syncPremium(); $('#premiumStatus').textContent = '';
-  if (!$('#premiumDlg').open) $('#premiumDlg').showModal();
-}
-if (PREMIUM) {
+function openPremium() { if (WEB) openAuth(); }
+if (WEB) {
   $('#battleLogRefresh').addEventListener('click', loadVip);
   $('#battleLogCupFilter').addEventListener('change', renderBattleLog); $('#battleLogTeamFilter').addEventListener('change', renderBattleLog);
   $('#battleLogForm').addEventListener('submit', async e => {
@@ -1544,27 +1524,6 @@ if (PREMIUM) {
     } catch(err) { $('#vipUpgradeResults').textContent=err.message; } finally { button.disabled=false; }
   });
   $('#vipUpgradeResults').addEventListener('click', e => { const button=e.target.closest('[data-upgrade-team]'); if (!button) return; loadIntoGrader(button.dataset.upgradeTeam.split(',').map(id=>({id}))); showView('grade'); runGrade(); });
-  $('#premiumBtn').addEventListener('click', () => showView('vip'));
-  $('#premiumDetails').addEventListener('click', () => { $('#premiumDlg').close(); showView('vip'); });
-  $('#premiumClose').addEventListener('click', () => $('#premiumDlg').close());
-  document.addEventListener('click', async (e) => {
-    const btn = e.target.closest('[data-plan]'); if (!btn) return;
-    if (!window.FAINTR_BRIDGE.state.user) { $('#premiumDlg').close(); AUTH.returnToPremium = true; setAuthMode('in'); openAuth(); return; }
-    const buttons = $$('[data-plan]'); buttons.forEach(b => b.disabled = true);
-    const status = btn.closest('#view-vip') ? $('#vipStatus') : $('#premiumStatus');
-    status.textContent = 'Opening Patreon…';
-    try { await window.FAINTR_BRIDGE.billing.checkout(btn.dataset.plan); } catch (err) { status.textContent = err.message; buttons.forEach(b => b.disabled = false); }
-  });
-  $('#premiumManage').addEventListener('click', async () => {
-    $('#premiumStatus').textContent = 'Opening billing…';
-    try { await window.FAINTR_BRIDGE.billing.portal(); } catch (err) { $('#premiumStatus').textContent = err.message; }
-  });
-  $('#premiumRefresh').addEventListener('click', async () => {
-    try { await window.FAINTR_BRIDGE.billing.refresh(); if (hasPremium()) location.reload(); else $('#premiumStatus').textContent = 'No active membership found yet. If payment just completed, wait a moment and refresh again.'; } catch (err) { $('#premiumStatus').textContent = err.message; }
-  });
-  $('#vipManage').addEventListener('click', async () => { try { await window.FAINTR_BRIDGE.billing.portal(); } catch (err) { $('#vipStatus').textContent = err.message; } });
-  $('#vipRefresh').addEventListener('click', async () => { try { await window.FAINTR_BRIDGE.billing.refresh(); if (hasPremium()) location.reload(); else $('#vipStatus').textContent = 'No active membership found yet.'; } catch (err) { $('#vipStatus').textContent = err.message; } });
-  $('#authBilling').addEventListener('click', () => { $('#authDlg').close(); openPremium(); });
   $('#authExport').addEventListener('click', async () => {
     try {
       const data = await window.FAINTR_BRIDGE.billing.exportData();
@@ -1572,7 +1531,7 @@ if (PREMIUM) {
       const a = document.createElement('a'); a.href = url; a.download = 'faintr-account-data.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) { $('#authStatus2').textContent = err.message; }
   });
-  window.addEventListener('focus', () => window.FAINTR_BRIDGE.billing.refresh().catch(() => {}));
+
 }
 function syncAccount() {
   if (!WEB) return;
@@ -1662,11 +1621,11 @@ if (WEB) {
     }
     if (reason !== 'auth') return;
     VIPUI.seq++; VIPUI.battles=[]; VIPUI.teams=[]; VIPUI.alerts=[];
-    if (PREMIUM) { $('#battleLogStats').replaceChildren(); $('#battleLogEntries').replaceChildren(); $('#vipAlertList').replaceChildren(); $('#vipUpgradeResults').textContent='Find your next build for the selected cup.'; $('#savedList').replaceChildren(); }
+    if (WEB) { $('#battleLogStats').replaceChildren(); $('#battleLogEntries').replaceChildren(); $('#vipAlertList').replaceChildren(); $('#vipUpgradeResults').textContent='Find your next build for the selected cup.'; $('#savedList').replaceChildren(); }
     syncAccount();
     if (!S.info) return;
     if (PREMIUM) { await api('/core/membership', {}, { noF: true }); await setFormat(S.f, true); }
-    if (PREMIUM && $('#view-vip').classList.contains('on')) loadVip();
+    if (WEB && $('#view-vip').classList.contains('on')) loadVip();
     await loadRoster().catch(() => {});
     if ($('#view-saved').classList.contains('on')) loadSaved();
     if ($('#view-bugs').classList.contains('on')) loadBugs();
@@ -1742,19 +1701,8 @@ async function loadInfo() {
   await setFormat(S.f, true);
   S.booted = true;
   if (WEB) { $('#loader').hidden = true; api('/core/regrade', {}, { noF: true }).then(async () => {
-    if (PREMIUM && hasPremium()) { VIPUI.alerts=await api('/api/vip/alerts',undefined,{noF:true}); renderVipAlerts(); const count=VIPUI.alerts.filter(a=>!a.read).length; if (count) showToast(`${count} saved team${count===1?' has':'s have'} changed.`,{label:'View alerts',run:()=>showView('vip')}); }
+    if (window.FAINTR_BRIDGE.state.user) { VIPUI.alerts=await api('/api/vip/alerts',undefined,{noF:true}); renderVipAlerts(); const count=VIPUI.alerts.filter(a=>!a.read).length; if (count) showToast(`${count} saved team${count===1?' has':'s have'} changed.`,{label:'View alerts',run:()=>showView('vip')}); }
   }).catch(() => {}); api('/core/refresh-roster', {}, { noF: true }).then(() => loadRoster()).catch(() => {}); }
-  if (PREMIUM) {
-    const params = new URLSearchParams(location.search);
-    if (params.get('checkout') === 'success') {
-      openPremium(); $('#premiumStatus').textContent = 'Confirming your payment…';
-      try {
-        await window.FAINTR_BRIDGE.billing.call({ action: 'confirm', sessionId: params.get('session_id') });
-        await window.FAINTR_BRIDGE.billing.refresh();
-        if (hasPremium()) { history.replaceState(null, '', location.pathname); location.reload(); return; }
-        $('#premiumStatus').textContent = 'Payment is still processing. Refresh access in a moment.';
-      } catch (err) { $('#premiumStatus').textContent = err.message; }
-    } else if (params.get('checkout') === 'canceled') { openPremium(); $('#premiumStatus').textContent = 'Checkout canceled. You can choose a plan whenever you’re ready.'; history.replaceState(null, '', location.pathname); }
-  }
+
   pollStatus();
 })();

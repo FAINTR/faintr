@@ -40,7 +40,8 @@ const CACHE = path.resolve(opt('cache', path.join(ROOT, '.webcache')));
 const SEED = path.resolve(opt('seed', path.join(ROOT, 'assets/data')));
 const ONLY = (opt('formats', '') || '').split(',').map((s) => s.trim()).filter(Boolean);
 const FORCE = flag('force'), ONLY_BUILT = flag('only-built'), FETCH = flag('fetch');
-const PREMIUM = process.env.FAINTR_BILLING_ENABLED === 'true';
+// All website tools are free; a stale repository variable must not re-enable billing.
+const PREMIUM = false;
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const readJ = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, '')); } catch (e) { return d; } };
@@ -270,7 +271,7 @@ function assemble(src, version, built, formats) {
   fs.rmSync(path.join(tmp, 'static/index.html'));
   // Site settings from the environment (GitHub repository variables), so nobody edits code to change a link
   const env = (k) => (process.env[k] || '').trim();
-  const cfg = { discordUrl: env('FAINTR_DISCORD_URL'), patreonUrl: env('FAINTR_PATREON_URL') || 'https://www.patreon.com/c/FAINTR', patreonReady: env('FAINTR_PATREON_READY') === 'true', supabaseUrl: env('SUPABASE_URL').replace(/\/$/, ''), supabaseAnonKey: env('SUPABASE_ANON_KEY'), loginProviders: env('FAINTR_LOGIN_PROVIDERS').toLowerCase(), billingEnabled: PREMIUM };
+  const cfg = { discordUrl: env('FAINTR_DISCORD_URL'), patreonUrl: '', patreonReady: false, supabaseUrl: env('SUPABASE_URL').replace(/\/$/, ''), supabaseAnonKey: env('SUPABASE_ANON_KEY'), loginProviders: env('FAINTR_LOGIN_PROVIDERS').toLowerCase(), billingEnabled: PREMIUM };
   if (PREMIUM) {
     if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) throw new Error('Premium requires Supabase.');
     const worker = fs.readFileSync(path.join(ROOT, 'web/premium-worker.js'), 'utf8')

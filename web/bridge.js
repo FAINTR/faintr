@@ -104,7 +104,7 @@
     savedRemove: (id) => cloud.change((d) => { d.teams = d.teams.filter((x) => x.id !== id); }),
   };
   const billing = {
-    enabled: CFG.billingEnabled === true,
+    enabled: false,
     hasAccess: () => !billing.enabled || !!(state.user && state.membership.active && (state.membership.plan === 'lifetime' || Date.parse(state.membership.expiresAt) > Date.now())),
     async refresh() {
       const userId = state.user?.id;
@@ -194,7 +194,7 @@
     const p = u.pathname, q = Object.fromEntries(u.searchParams), method = body === undefined ? 'GET' : 'POST';
     if (p.startsWith('/api/vip/')) {
       requirePremium();
-      if (!state.user) throw new Error('Sign in to use your VIP tools.');
+      if (!state.user) throw new Error('Sign in to save your battle history. All tools are free.');
       if (p === '/api/vip/battles' && method === 'GET') return (await cloud.load(true)).battles || [];
       if (p === '/api/vip/battles' && method === 'POST') return cloud.change(d => {
         if (d.battles.length >= 2000) throw new Error('Your battle log holds 2,000 entries. Download your data before removing older entries.');
