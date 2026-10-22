@@ -109,6 +109,7 @@ jobs:
         env:
           FAINTR_DISCORD_URL: ${{ vars.FAINTR_DISCORD_URL }}
           FAINTR_PATREON_URL: ${{ vars.FAINTR_PATREON_URL }}
+          FAINTR_SUPPORT_URL: ${{ vars.FAINTR_SUPPORT_URL }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
           FAINTR_LOGIN_PROVIDERS: ${{ vars.FAINTR_LOGIN_PROVIDERS }}

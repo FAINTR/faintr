@@ -261,6 +261,14 @@ function assemble(src, version, built, formats) {
   fs.mkdirSync(path.join(tmp, 'licenses'), { recursive: true });
   const noticesHtml = notices.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
   fs.writeFileSync(path.join(tmp, 'licenses/index.html'), `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Open-source notices — FAINTR</title><style>body{margin:0;background:#22252e;color:#f2f4f7;font:16px/1.6 system-ui,sans-serif}main{max-width:900px;margin:auto;padding:28px 24px 70px}a{color:#f5c937}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.6 ui-monospace,monospace}</style></head><body><main><a href="/">Back to FAINTR</a><h1>Open-source notices</h1><p><a href="/static/THIRD_PARTY_NOTICES.txt">Plain text license notices</a></p><pre>${noticesHtml}</pre></main></body></html>`);
+  const supportCss = fs.readFileSync(path.join(ROOT, 'web/supporters.css'));
+  fs.mkdirSync(path.join(tmp, 'supporters'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'supporters/style.css'), supportCss);
+  fs.writeFileSync(path.join(tmp, 'supporters/index.html'), rq('tools/supporters-page').renderSupportersPage({
+    supporters: readJ(path.join(ROOT, 'web/supporters.json'), { supporters: [] }).supporters,
+    patreonUrl: (process.env.FAINTR_SUPPORT_URL || '').trim(), cssVersion: sha(supportCss).slice(0, 10),
+    appCssVersion: sha(fs.readFileSync(path.join(tmp, 'static/app.css'))).slice(0, 10),
+  }));
   for (const page of ['privacy', 'terms']) {
     const source = path.join(ROOT, 'web/legal', page + '.html');
     if (fs.existsSync(source)) {

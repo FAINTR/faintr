@@ -281,7 +281,7 @@ function fieldHTML(f, limit) {
 function quickHTML(d) {
   const rows = d.detail.threats.map((t) => `<tr><td>${esc(t.name)}</td>${t.vs.map((v) => { const my = 1000 - v.avg; return `<td class="n ${cls(my)}" title="Your rating at 0 shields ${1000 - v.r0}, 1 shield ${1000 - v.r1}, 2 shields ${1000 - v.r2}">${my}</td>`; }).join('')}</tr>`).join('');
   return `<div><h4>Top threats and who answers them</h4><p class="hint">Your battle rating against PvPoke's six top threats (average of 0 and 1 shields). Over 500 is a win.</p>
-      <table class="t"><thead><tr><th>Threat</th>${d.members.map((m) => `<th class="n">${esc(m.name)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>
+      <div class="scroll" tabindex="0" role="region" aria-label="Threat matchups; scroll horizontally if needed"><table class="t"><thead><tr><th>Threat</th>${d.members.map((m) => `<th class="n">${esc(m.name)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>
       <p class="note" style="margin-top:10px">${d.detail.blind.length ? `Beat all three at 1 shield: ${d.detail.blind.map(esc).join(', ')}.` : 'No top-100 meta Pokémon beats all three at 1 shield.'}</p>
       ${d.field ? `<h4 style="margin-top:14px">Against the meta</h4>${fieldHTML(d.field, 6)}` : ''}</div>
     <div><h4>Next steps</h4>
