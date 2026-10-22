@@ -1659,6 +1659,14 @@ function showView(name) {
   if (name === 'bugs') loadBugs();
   $$('nav.tabs button').forEach((x) => x.setAttribute('aria-selected', x.dataset.view === name));
   $$('.view').forEach((v) => v.classList.toggle('on', v.id === 'view-' + name));
+  const tools = $('.fmttools'), view = $('#view-' + name);
+  let head = view.querySelector('.viewhead');
+  if (!head) {
+    head = document.createElement('div'); head.className = 'viewhead';
+    view.prepend(head);
+  }
+  tools.parentElement.classList.remove('has-tools');
+  head.classList.add('has-tools'); head.append(tools);
   if (name === 'meta' && !META) loadMeta();
   if (name === 'saved') loadSaved();
   if (name === 'news') loadNews();

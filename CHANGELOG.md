@@ -10,4 +10,4 @@
 
 Your private roster, account details and notes are never included. Team results use the latest available game data, so grades can change after updates.
 
-- **Support link, easier to find.** Support FAINTR now sits beside Data and updates.
+- **Support link, easier to find.** Find Support FAINTR beside Data and updates, near the page heading.
