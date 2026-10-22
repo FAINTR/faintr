@@ -370,7 +370,8 @@ aside.filters { top: 128px; max-height: calc(100vh - 146px); }
 .rgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr)); gap: 12px; }
 .rgrid > .empty { grid-column: 1 / -1; }
 .rcard { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
-.rtop { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; }
+.rtop { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.rtop > div { min-width: 0; overflow-wrap: anywhere; }
 .crest { min-width: 60px; height: 60px; border-radius: var(--r-card); background: var(--raised); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; gap: 2px; padding: 0 4px; overflow: hidden; }
 .crest svg { width: 48px; height: 48px; flex: none; }
 .crest.dual svg { width: 42px; height: 42px; }

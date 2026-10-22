@@ -8,6 +8,7 @@ const setup={v:1,f:'all-1500',m:[
   {id:'mandibuzz',moveset:['SNARL','DARK_PULSE','AERIAL_ACE'],ivs:{atk:0,def:13,hp:15},levelCap:51}],w:{coverage:3}};
 async function fits(page) {
   const sizes = await page.evaluate(() => ({width:document.documentElement.clientWidth, content:document.documentElement.scrollWidth}));
+  if(sizes.content>sizes.width+1)console.log(await page.evaluate(()=>[...document.querySelectorAll('main *,dialog[open] *')].filter(e=>e.getBoundingClientRect().right>document.documentElement.clientWidth+1&&e.getBoundingClientRect().width>0).map(e=>({tag:e.tagName,id:e.id,class:e.className,right:e.getBoundingClientRect().right})).slice(0,15)));
   expect(sizes.content).toBeLessThanOrEqual(sizes.width + 1);
 }
 async function loaded(page) {
@@ -15,9 +16,11 @@ async function loaded(page) {
   await expect(page.locator('#teams .team').first()).toBeVisible();
   await expect(page.locator('#loader')).toBeHidden();
 }
-test.beforeEach(async ({page}) => {
+test.beforeEach(async ({page},info) => {
   // Tests are isolated: prohibit account writes, OAuth, analytics and all other external requests.
-  await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
+  // Locally created blob workers share this origin (Safari's gzip fallback).
+  const origin=new URL(info.project.use.baseURL).origin;
+  await page.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
   // Build-time production configuration is replaced only in this isolated browser, never on disk.
   await page.route('**/config.js*', route => route.fulfill({contentType:'text/javascript', body:'window.FAINTR_CONFIG={};'}));
 });

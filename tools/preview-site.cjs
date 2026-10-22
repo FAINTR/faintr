@@ -15,4 +15,4 @@ http.createServer((req, res) => {
   if (!fs.existsSync(file) || !fs.statSync(file).isFile()) { res.writeHead(404).end(); return; }
   res.writeHead(200, {'Content-Type': types[path.extname(file)] || 'application/octet-stream', 'Cache-Control':'no-store'});
   if (req.method === 'HEAD') res.end(); else fs.createReadStream(file).pipe(res);
-}).listen(4175, '127.0.0.1', () => console.log('Built-site preview ready on 127.0.0.1:4175'));
+}).listen(4176, '127.0.0.1', () => console.log('Built-site preview ready on 127.0.0.1:4176'));
