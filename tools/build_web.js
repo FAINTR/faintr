@@ -319,7 +319,7 @@ async function assemble(src, version, built, formats) {
     '/*', '  X-Content-Type-Options: nosniff', '  Referrer-Policy: strict-origin-when-cross-origin', '  X-Frame-Options: DENY',
     `  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-eval' https://static.cloudflareinsights.com; worker-src 'self'; connect-src 'self' https://cloudflareinsights.com${cfg.supabaseUrl ? ` ${cfg.supabaseUrl} ${cfg.supabaseUrl.replace(/^https/, 'wss')}` : ''}; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'`, '',
   ].join('\n'));
-  // Sharing is stateless: the validated team travels in the URL, never Supabase.
+  // Short sharing links resolve only a sanitized public setup; legacy tokens stay supported.
   const shareGm=readJ(path.join(src,'data/gamemaster.json'));
   const pokemon={};
   for(const p of shareGm.pokemon){
@@ -327,10 +327,10 @@ async function assemble(src, version, built, formats) {
     pokemon[p.speciesId]=value;
     if(p.shadow){pokemon[p.speciesId+'_shadow']={...value,name:p.speciesName+' (Shadow)',charged:[...value.charged,'FRUSTRATION','RETURN']};}
   }
-  const shareMetadata={formats:Object.fromEntries(formats.map(f=>[f.key,f.title])),pokemon,moves:Object.fromEntries(shareGm.moves.map(m=>[m.moveId,m.name])),csp:fs.readFileSync(path.join(tmp,'_headers'),'utf8').split('Content-Security-Policy: ')[1].split('\n')[0]};
+  const shareMetadata={supabaseUrl:cfg.supabaseUrl,supabaseAnonKey:cfg.supabaseAnonKey,formats:Object.fromEntries(formats.map(f=>[f.key,f.title])),pokemon,moves:Object.fromEntries(shareGm.moves.map(m=>[m.moveId,m.name])),csp:fs.readFileSync(path.join(tmp,'_headers'),'utf8').split('Content-Security-Policy: ')[1].split('\n')[0]};
   const sharedWorker=(await esbuild.build({entryPoints:[path.join(ROOT,'web/share-worker.js')],bundle:true,platform:'browser',format:'esm',minify:true,write:false,plugins:[{name:'share-metadata',setup(build){build.onResolve({filter:/share-metadata\.json$/},()=>({path:'share-metadata',namespace:'faintr'}));build.onLoad({filter:/.*/,namespace:'faintr'},()=>({contents:JSON.stringify(shareMetadata),loader:'json'}));}}]})).outputFiles[0].contents;
   fs.writeFileSync(path.join(tmp,'_worker.js'),sharedWorker);
-  fs.writeFileSync(path.join(tmp,'_routes.json'),JSON.stringify({version:1,include:['/share/*'],exclude:[]}));
+  fs.writeFileSync(path.join(tmp,'_routes.json'),JSON.stringify({version:1,include:['/share/*','/s/*'],exclude:[]}));
   const imageCode=esbuild.buildSync({entryPoints:[path.join(ROOT,'web/share-image.js')],bundle:true,platform:'node',format:'cjs',write:false}).outputFiles[0].text;
   const imageModule={exports:{}};new Function('module','exports',imageCode)(imageModule,imageModule.exports);
   const preview=await imageModule.exports.renderCard({format:'Pokemon GO PvP'});

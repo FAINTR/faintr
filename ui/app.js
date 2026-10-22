@@ -1722,8 +1722,8 @@ async function loadInfo() {
   S.f = saved && store.get('faintr.period') === period && S.info.formats.some((f) => f.key === saved) ? saved : liveFirst;
   store.set('faintr.period', period);
   // A shared link selects its league before downloading team data.
-  if(WEB && /^\/share\/[^/]+$/.test(location.pathname)) {
-    try { const shared=window.FAINTR_SHARE.decode(location.pathname.split('/')[2]); if(S.info.formats.some(f=>f.key===shared.f))S.f=shared.f; } catch(_) { /* restoreSharedTeam shows a readable error */ }
+  if(WEB && /^\/(share|s)\/[^/]+$/.test(location.pathname)) {
+    try { const shared=sharedTeamFromPage(); if(S.info.formats.some(f=>f.key===shared.f))S.f=shared.f; } catch(_) { /* restoreSharedTeam shows a readable error */ }
   }
   S.fmt = await api('/api/format', undefined); S._cat = null;
   S.ownedOnly = store.get('faintr.ownedOnly') === '1';
@@ -1767,11 +1767,14 @@ async function shareTeam(members,format=S.f) {
       const iv=m.ivs?m.ivs:(await api('/api/iv',{...m,f:format})).ivs;
       return {id:m.id,moveset:m.moveset,ivs:iv,levelCap:m.levelCap||50};
     }));
-    const token=window.FAINTR_SHARE.encode({v:1,f:format,m:exact,w:{...S.weights}});
-    const url='https://faintr.com/share/'+token;
+    const team=window.FAINTR_SHARE.clean({v:1,f:format,m:exact,w:{...S.weights}});
+    const response=await fetch('/share/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(team)});
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok || !/^\/s\/[A-Za-z0-9_-]{12}$/.test(result.path||''))throw Error(result.error||'Could not create a short team link. Please try again.');
+    const url='https://faintr.com'+result.path;
     const dialog=$('#teamShareDialog');
     $('#teamShareLink').value=url;
-    $('#sharePreview').src='/share/'+token+'/image.png';
+    $('#sharePreview').src=result.path+'/image.png';
     $('#sharePreview').alt='Team card for '+exact.map(m=>catalogById().get(m.id)?.name||m.id).join(', ');
     $('#sharePreview').hidden=false;$('#shareMessage').textContent='';
     $('#sharePreview').onerror=()=>{$('#sharePreview').hidden=true;$('#shareMessage').textContent='The preview could not load. You can still copy the team link.';};
@@ -1807,11 +1810,17 @@ $('#sharedReplaceBtn').addEventListener('click',()=>{
   lastReport=null;$('#saveBtn').disabled=true;$('#gradeResult').innerHTML=GRADER_EMPTY;
   $('#slots .slot:nth-child('+(i+1)+') input').focus();
 });
+function sharedTeamFromPage(){
+  const data=$('#sharedTeamData');
+  if(data)return window.FAINTR_SHARE.clean(JSON.parse(data.textContent));
+  if(location.pathname.startsWith('/share/'))return window.FAINTR_SHARE.decode(location.pathname.split('/')[2]);
+  throw Error('This shared team could not be loaded. Please reopen its link.');
+}
 async function restoreSharedTeam(){
-  const match=/^\/share\/([^/]+)$/.exec(location.pathname);
+  const match=/^\/(share|s)\/([^/]+)$/.exec(location.pathname);
   if(!WEB||!match)return;
   try{
-    const team=window.FAINTR_SHARE.decode(match[1]);
+    const team=sharedTeamFromPage();
     if(!S.info.formats.some(f=>f.key===team.f))throw Error('This shared league or cup is no longer available. Choose another at the top.');
     if(team.f!==S.f)await setFormat(team.f);
     for(const m of team.m){
