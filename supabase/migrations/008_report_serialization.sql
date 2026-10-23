@@ -1,4 +1,5 @@
--- PROPOSAL ONLY. Does not alter access policies. Obtain approval before production.
+-- Approved by the owner and applied to production on 2026-10-23.
+-- Does not alter access policies. Run after the earlier migrations on new setups.
 -- Serializes the existing count/check/insert to prevent concurrent reports all
 -- passing the same limit. No reports are removed or migrated.
 create or replace function public.bug_rate_limit() returns trigger

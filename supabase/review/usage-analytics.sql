@@ -7,7 +7,7 @@ create table if not exists faintr_usage.settings(singleton boolean primary key d
 create table if not exists faintr_usage.events(
  id uuid primary key, received_at timestamptz not null default now(),
  visitor text not null, session text not null, event text not null, tool text not null,
- source text not null, returning boolean not null, consent text not null
+ source text not null, is_returning boolean not null, consent text not null
 );
 create index if not exists usage_event_time on faintr_usage.events(received_at);
 create table if not exists faintr_usage.limits(key text primary key,minute timestamptz not null,hits integer not null);
@@ -35,7 +35,7 @@ begin
  -- A fixed global ceiling limits storage growth even if clients fabricate events.
  perform pg_advisory_xact_lock(72934011);
  if (select count(*) from events where received_at>=date_trunc('day',now()))>=10000 then return;end if;
- insert into events(id,visitor,session,event,tool,source,returning,consent)
+ insert into events(id,visitor,session,event,tool,source,is_returning,consent)
  values((p_event->>'id')::uuid,p_event->>'visitor',p_event->>'session',p_event->>'event',p_event->>'tool',p_event->>'source',(p_event->>'returning')::boolean,p_event->>'consent') on conflict(id) do nothing;
  delete from events where received_at<now()-interval '30 days';
  delete from limits where minute<now()-interval '10 minutes';

@@ -147,7 +147,7 @@ jobs:
 
       - name: Check desktop, mobile and Safari before publishing
         if: steps.gate.outputs.skip != 'true'
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: npx playwright test --workers=2
 
       - name: Save release-check report

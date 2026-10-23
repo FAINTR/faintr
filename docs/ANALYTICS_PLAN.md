@@ -6,7 +6,7 @@ Cloudflare Web Analytics is already installed with automatic setup for faintr.co
 
 Cloudflare's [metric definitions](https://developers.cloudflare.com/web-analytics/data-metrics/high-level-metrics/) describe visits using entry referrers. Its [FAQ](https://developers.cloudflare.com/web-analytics/faq/) says custom events and UTM reporting are not supported. Existing analytics therefore cannot provide the requested completed-tool counts or returning-browser funnel.
 
-The prepared supplement uses the existing Cloudflare/Supabase stack, adds no vendor SDK, and is **disabled by default**. Its production table, credential, routes, privacy wording and activation require owner review. Nothing in this audit enables new production tracking.
+The prepared supplement uses the existing Cloudflare/Supabase stack, adds no vendor SDK, and is **disabled by default**. On October 23 the owner explicitly chose **keep it off pending review**. Its production table, credential, routes, privacy wording and activation remain unprovisioned; no new production tracking is enabled.
 
 ## What each number means
 
@@ -69,6 +69,6 @@ Reviewable files: `ui/analytics.js`, `web/analytics-endpoint.js`, `supabase/revi
 
 - `node --test tools/analytics.test.cjs` tests disabled behavior, consent/withdrawal, expiry, source/session stability, allowlists, body limits, same-origin checks and hashed storage payloads.
 - The release browser test uses a synthetic enabled configuration and intercepts `/a/event` locally. It checks no pre-consent request, one grading completion despite comparison work, withdrawal, payload shape and phone dialog layout. It never sends test data to production.
-- Before activation, test the SQL in a disposable database: bad write keys must fail; anonymous direct table reads must fail; duplicate event IDs must insert once; retention and limits must work. These database checks have not yet run.
+- Disposable PostgreSQL tests now confirm the proposal compiles, bad write keys/invalid tools fail, anonymous direct table reads fail, duplicate event IDs insert once and ingestion purges expired events. This caught and fixed a reserved SQL column before deployment. The tests do not simulate parallel connections or execute the optional Cron background job, which remains uninstalled. Test those before activation.
 - After an approved deployment, opt in with a dedicated test browser, complete one workflow and verify aggregate counts increased once. Confirm the network payload contains only the documented fields. Verify an opted-out browser sends none. Do not use real roster contents as test labels.
 - Existing Cloudflare Web Analytics remains the place to monitor field LCP, INP and CLS. Watch mobile P75 over a consistent 7/28-day window; do not treat local lab timings as field measurements.

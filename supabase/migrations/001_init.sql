@@ -100,6 +100,8 @@ begin
   new.user_id := auth.uid();
   new.status := 'new';
   if auth.uid() is not null then new.email := coalesce(auth.jwt() ->> 'email', new.email); end if;
+  -- Serialize each bucket so simultaneous submissions cannot pass the same count.
+  perform pg_advisory_xact_lock(hashtextextended('faintr-report:' || coalesce(auth.uid()::text, 'anonymous'), 0));
   if auth.uid() is null and (select count(*) from public.bug_reports where user_id is null and created_at > now() - interval '1 minute') >= 10 then
     raise exception 'Lots of reports are coming in right now. Please try again in a minute.';
   end if;

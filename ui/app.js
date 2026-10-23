@@ -1506,9 +1506,15 @@ async function loadDevRuns() {
   $('#devRuns').innerHTML = '<span class="spin"></span> Checking recent updates';
   try {
     const r = await api('/api/dev/runs', undefined, { noF: true });
+    $('#devRun').hidden=false;$('#devForce').hidden=false;
     const runs = (r && r.runs) || [];
     $('#devRuns').innerHTML = runs.length ? `<table class="t"><thead><tr><th>Started</th><th>How</th><th>Status</th></tr></thead><tbody>${runs.map((x) => `<tr><td>${new Date(x.created_at).toLocaleString()}</td><td>${esc(x.event === 'schedule' ? 'Nightly' : 'Manual')}</td><td><a href="${esc(x.html_url)}" target="_blank" rel="noopener">${esc(x.conclusion || x.status)}</a></td></tr>`).join('')}</tbody></table>` : 'No updates have run yet.';
-  } catch (e) { $('#devRuns').textContent = e.message; }
+  } catch (e) {
+    // Manual Actions controls already enforce GitHub access. Offer that working
+    // route when the optional Supabase admin endpoint is not configured.
+    $('#devRun').hidden=true;$('#devForce').hidden=true;
+    $('#devRuns').innerHTML=`<p role="status">The in-site update connection is unavailable. ${esc(e.message)}</p><p><a class="btn" href="https://github.com/FAINTR/faintr/actions/workflows/daily-data.yml" target="_blank" rel="noopener">Open update controls on GitHub</a></p><p class="note">Choose Run workflow there to update the data manually. Automatic scheduled updates continue independently.</p>`;
+  }
 }
 $('#devRun').addEventListener('click', async () => { try { const r = await api('/api/update', { force: false }, { noF: true }); showToast(r.message); $('#devRuns').dataset.loaded = ''; setTimeout(loadDevRuns, 4000); } catch (e) { showToast(e.message); } });
 $('#devForce').addEventListener('click', async () => { try { const r = await api('/api/update', { force: true }, { noF: true }); showToast(r.message); $('#devRuns').dataset.loaded = ''; setTimeout(loadDevRuns, 4000); } catch (e) { showToast(e.message); } });

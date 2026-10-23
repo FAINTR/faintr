@@ -244,6 +244,17 @@ test('account switch clears private views even when the next account cannot load
  await expect.poll(()=>page.evaluate(()=>localStorage.getItem('faintr.cloud.synthetic-a'))).toBeNull();
  expect(await page.evaluate(()=>window.__testDoc.roster.length)).toBe(1);await fits(page);
 });
+test('unavailable in-site admin updates offer working GitHub controls',async({page})=>{
+ await page.route('**/config.js*',route=>route.fulfill({contentType:'text/javascript',body:'window.FAINTR_CONFIG={supabaseUrl:"https://release.invalid",supabaseAnonKey:"synthetic-test-key"};'}));
+ await page.route('**/vendor/supabase.js*',route=>route.fulfill({contentType:'text/javascript',body:`
+ window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:{user:{id:'synthetic-admin',email:'admin@example.invalid'}}}}),onAuthStateChange:()=>{}},functions:{invoke:async()=>({error:{message:'Synthetic missing endpoint',context:new Response('{}',{status:404})}})},from:table=>{const q={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:table==='profiles'?{display_name:'Synthetic admin',is_admin:true}:{version:1}}),single:async()=>({data:{version:1,roster:[],teams:[],battles:[],vip_settings:{}}})};return q;}})};
+ `}));
+ await loaded(page);await page.locator('#dataBtn').click();
+ const link=page.getByRole('link',{name:'Open update controls on GitHub',exact:true});await expect(link).toBeVisible();
+ await expect(link).toHaveAttribute('href','https://github.com/FAINTR/faintr/actions/workflows/daily-data.yml');
+ await expect(page.locator('#devRun')).toBeHidden();await expect(page.locator('#devForce')).toBeHidden();await fits(page);
+ await page.locator('#dlgClose').click();await expect(page.locator('#dataDlg')).toBeHidden();
+});
 
 test('typed account details stay readable in system, light and dark themes',async({page,browserName})=>{
   await page.route('**/config.js*',route=>route.fulfill({contentType:'text/javascript',body:'window.FAINTR_CONFIG={supabaseUrl:"https://release.invalid",supabaseAnonKey:"synthetic-test-key"};'}));

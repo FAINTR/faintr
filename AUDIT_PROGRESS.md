@@ -1,72 +1,68 @@
 # FAINTR audit working record
 
-Updated 2026-10-23. This is a working record, not a claim that all checks are complete.
-Baseline deployed commit: `aa89d56768ba75a0f449c5113713750865e031ae`.
-Current audit changes are not yet published. Working reports now exist in `docs/WEBSITE_AUDIT.md`, `SECURITY_AUDIT.md`, `ROSTER_AUDIT.md`, `BATTLE_AUDIT.md`, `PERFORMANCE_AUDIT.md` and `ANALYTICS_PLAN.md`.
+Updated October 23, 2026, 15:04 UTC. This is a continuation record, not a claim that every check or deployment is complete.
 
-## Confirmed problems and prepared fixes
+## Release state
 
-| Severity | Problem and impact | Verification | Prepared fix |
-| --- | --- | --- | --- |
-| High | Account email/password text unreadable in dark themes | Browser contrast measured 1.10:1 before fix; synthetic inputs only | Explicit field colors, autofill colors and color scheme; browser regression |
-| High | Worker crashes could leave grading operations waiting indefinitely | Simulated boot and runtime worker failures | Reject affected operations, release queued jobs, preserve fallback; regressions |
-| High | Old account calculations/storage replies could survive an account change | Synthetic account-switch test | Terminate old core, reject old work and guard stale replies |
-| High | Background evaluation refresh could overwrite edits or revive deleted entries | Storage patch regression tests | Apply evaluation/history only to unchanged existing inputs |
-| Medium | Same roster entry edited on two devices could lose the newer edit | Synthetic content-version tests | Reject conflicting edit while retaining form draft |
-| Medium | Large imports and invalid forms could silently omit or misidentify entries | 1,001-row and invalid-form regressions | Explicit rejected indices, retained pending entries, validated moves/CP/forms |
-| Medium | Explicit level ceilings were ignored for default IVs; Mega rank comparisons used a different ceiling | Real engine level-40/50/51 checks | Consistent explicit ceiling for actual and comparison builds |
-| Medium | Battle reference damage used stats altered by a previous simulated battle | Melmetal Superpower / Registeel reference check | Compute reference damage from fresh neutral starting stats |
-| Medium | Grader could accept duplicate species/forms or multiple Megas unlike team search | Code trace; dedicated regression pending | Shared team legality checks |
-| Medium | Populated report overflowed 320px phone (437px document width) | Browser reproduction | Scrollable accessible tables, stacked report members, wrapped controls |
-| Medium | Initial empty-roster load pulled unrelated league matrices | Local cold-load measurement | Avoid matrices for empty roster and website information; catalog-only eligibility |
-| Low | Root metadata duplicated; ancillary pages lacked canonical/social metadata and sitemap | Generated output inspection | Public-page metadata, sitemap/robots and useful 404 |
-| Low | Development esbuild server advisory | npm audit; development-only exposure | esbuild updated; npm reports zero known dependency vulnerabilities |
+- Previously deployed baseline: `aa89d56768ba75a0f449c5113713750865e031ae`.
+- Main audit release committed/pushed: `24f9b5b1588421abe67a33c5f368888ceaeafbb8` (46 files). Workflow `39971805865` succeeded and published at15:07UTC, with5formats freshly rebuilt,72Node regressions and100browser checks passed. Live smoke verification remains pending.
+- Follow-up change: disposable database CI, proposed analytics SQL syntax correction, approved report-limit migration, and tested admin-update fallback to GitHub. Commit/publication pending.
+- No customer roster, backup contents, credentials or account deletion was used for testing.
+
+## Owner decisions and production change
+
+- Owner explicitly approved report spam-limit fix. Applied transactionally in Supabase October23; read-back: `serialized_report_limit=true`, `active_report_trigger=true`. Existing limits, reports and roster policies intact. SQL: `supabase/migrations/008_report_serialization.sql`. Local screenshot: sibling `output/bug-report-fix-verified.png`.
+- Owner explicitly chose **keep optional analytics off pending review**. Do not enable its flags, provision schema/write credential/Cron job, or publish draft privacy language. Existing Cloudflare Web Analytics remains active.
+- Optional `trigger-update` is absent in production with no GitHub credential. Do not provision new access. UI fallback offers existing GitHub workflow instead of dead controls; scheduled updates remain independent.
+
+## Inspection and fixes completed
+
+Detailed severity/reproduction/fix reports: `docs/WEBSITE_AUDIT.md`, `SECURITY_AUDIT.md`, `ROSTER_AUDIT.md`, `BATTLE_AUDIT.md`, `PERFORMANCE_AUDIT.md`, `ANALYTICS_PLAN.md`.
+
+- Account input/autofill colors, sign-out errors, immediate account-boundary cleanup, stale operation/reply rejection.
+- Worker startup/runtime failure recovery, lazy pool, retryable load errors.
+- Roster field-specific refresh/no resurrection, stale edit rejection, replay-safe imports, validation, retained pending rows/download, save/export/delete/undo feedback, retention notice. No storage migration or existing-data loss.
+- Default-IV/Mega level ceilings, minimum/fixed HP, neutral battle reference stats, exact timeout winner before rating rounding, shared species/one-Mega legality.
+- 320px report overflow, readable scrolling tables/charts, 44px controls, bounded dialogs, keyboard/listbox/tab relationships, Safari touch picking. Grade badge sizes/visibility, full moves/names and sharing preserved.
+- Stable initial controls/layout; unnecessary matrices/eager engines removed; current-input provenance and standard-league rebuilds.
+- Canonical/social metadata, sitemap/robots, helpful404, stale VIP privacy wording. All tools free, no getting-started guide, no bug-fix What's New entry. Earlier scavenger credit remains.
+- Desktop source Host/Origin/JSON protections and bounded bodies. Previously downloaded executables are not retroactively rebuilt.
+- Disabled optional consent-first analytics, no vendor SDK. SQL/retention/privacy proposals remain unprovisioned.
+
+## Verification
+
+- 72 Node cases passed:21audit,13battle,9analytics,23grading/roster,6operations. Sharing and reported-team reproduction passed.
+- Battle suite includes72native-engine/wrapper matchup comparisons plus independent arithmetic, energy/shields, buffs, fainting, timeout, level caps, HP and legality. Engine parity does not independently prove every game mechanic.
+- Disposable PostgreSQL suite:8tests passed. Actual migrations with synthetic accounts; anonymous denial, owner isolation/export/update/delete, protected admin flag, report limits/server stamps, intentional share privacy, analytics proposal credential/validation/idempotency/retention and deletion cascades. Dedicated CI has no production credentials.
+- Earlier90browser checks passed. Later unpublished Safari touch regression fixed and30focused cases passed;5admin-fallback checks passed. Final105-case suite PASSED in7.7minutes across desktop,320/375/430px and iPhone WebKit. Five focused admin-dialog cases also passed after the final explanatory-text change.
+- Physical iOS keyboard/rotation/screen readers and real two-device JWT flow not verified. Disposable SQL emulates identity functions; no real parallel PostgreSQL connection/load test.
+- Live metadata: RLS on5private tables; anonSELECT absent;4owner roster policies; no authenticated admin-flag UPDATE. Anonymous zero-row reads401. No customer rows requested.
+- Live public headers: CSP/frame denial/nosniff/referrer policy. Required unsafe-eval remains; HSTS/Permissions-Policy absent in sampled responses. No working XSS found; not security certification.
+- npm audit:0known vulnerabilities/166dependencies. Limited current/history credential scans:0matches, not exhaustive.
+- Backup39869002881(Oct22): encrypted backup and isolated recovery jobs success. No production restore/content access.
 
 ## Performance evidence
 
-One local cold-load sample per condition, uncompressed local delivery including workers. Slower phone: 375px, 4x CPU slowdown, 150ms latency, approximately 1.6Mbps download. These are lab observations, not real-user Core Web Vitals.
+Same local cold-load conditions, uncompressed local delivery including workers. Phone375px,4xCPU,150ms latency,200KB/s. One sample per condition, not field CWV/INP.
 
-| Metric | Baseline | Prepared changes (first measurement) |
+| Metric | Baseline | Optimized |
 | --- | ---: | ---: |
-| Delivered bytes | 42,731,823 | 16,192,019 |
-| Desktop teams ready | 3,576ms | 2,556ms |
-| Slower phone teams ready | 185,035ms | 48,086ms |
-| Slower phone LCP | 1,804ms | 1,880ms |
-| Slower phone CLS | 0.266 | 0.271 |
+| Delivered bytes |42,731,823|8,246,254|
+| Desktop teams ready |3,576ms|2,006ms|
+| Slower phone teams ready |185,035ms|46,441ms|
+| Phone LCP |1,804ms|1,604ms|
+| Desktop CLS |0.1539|0.0304|
+| Phone CLS |0.2657|0.0577|
 
-Team readiness improved in these samples; LCP and CLS did not. Further layout stabilization is prepared but unmeasured. Raw measurements: sibling workspace `output/performance-baseline.json` and `output/performance-after.json`.
+Evidence: sibling `output/performance-baseline.json`, `output/performance-optimized.json`. Large team binaries remain a slow-connection cost. Existing Cloudflare pre-release24h:125visits/142pageviews,LCP P75 976ms,INP81%good/19%needs improvement,CLS50%good/35%poor. Compare equivalent windows after deployment; visits are not unique people.
 
-## Storage model established
+## Next actions
 
-The live site requires an account for rosters. Supabase stores a JSON storage row per account, protected by owner policies in the reviewed SQL. Local browser cache is account-scoped. Guest saved teams are local and do not automatically move between devices. Clearing browser data removes local-only data and cache; account cloud data remains. Cloud writes use compare-and-swap version checks. Prepared improvements retain failed import entries, detect same-entry edit conflicts, refresh open views and explain retention. No production schema changes or user-data migrations have been made in this audit.
-
-## Verification completed so far
-
-- 11 audit regression tests plus 23 existing grading/roster tests passed before the latest small edits.
-- Reported Master team grading regression passed for custom/default/perfect IVs and a repeated calculation.
-- Four focused 320px browser tests passed: populated report tabs, populated battle/log, ancillary pages and account-input themes.
-- Full five-browser/viewport suite and final rebuild remain pending.
-
-## Latest work completed and immediate continuation
-
-- Battle suite now has 13 passing cases, including 72 native-engine/wrapper matchup comparisons, independent arithmetic, energy/shields, buffs reference regression, simultaneous fainting, timeout, level caps, Shedinja HP and team rules. Narrow timeout winner rounding fixed.
-- Audit regression suite now has 21 passing cases, including cloud CAS conflicts, retry-safe imports, sign-out error, worker failures/lazy startup, stale direct API replies and local desktop request protections.
-- Analytics suite has 9 passing cases. Existing Cloudflare setup verified in dashboard (142 page views / 125 visits over its prior 24h). Optional action tracking implemented **disabled**; SQL/credential/retention/privacy activation remains a review proposal.
-- Earlier 90-case full browser run passed. Latest 95-case run on the newer accessibility build has 94 expected passes and one confirmed Safari touch-selection regression, now fixed in working source but awaiting rebuild/retest. The run is session 83997, almost complete as of 14:34 UTC. Do not interpret this as a production defect: it was caught in the unpublished changes.
-- Latest working code also clears previous-account private UI immediately on account changes, before network lookups; a new browser test uses two entirely synthetic accounts, with the second offline. This test is not yet run. The bridge also guards late direct API responses by account epoch.
-- Initial controls preserve existing `vipTab` ID; an earlier test-caught navigation regression is fixed.
-- Final measured data-loading/layout sample is `../output/performance-optimized.json`: desktop 2,006ms / 8,246,254 bytes / CLS .0304; slower phone 46,441ms / same bytes / CLS .0577 / LCP1,604ms. Baseline same profile was 185,035ms / 42,731,823 bytes / CLS .2657 on phone. Lab uncompressed local delivery, not field claims.
-- npm online audit returns zero known vulnerabilities. Limited current/history secret-pattern scans found no matches; no credentials printed.
-- Live anonymous zero-row reads of private tables returned401. Admin update endpoint404 and Supabase dashboard confirms it is absent; source prepared, deployment needs approval. Live headers include CSP/frame denial/nosniff/referrer policy. No production security settings changed.
-- Current application changes are still UNCOMMITTED/UNDEPLOYED.
-
-Next steps:
-1. Session83997 finished:94 passed, one Safari touch failure. That failure is fixed: rebuilt current site and ran30 focused browser regressions (session82964), ALL PASSED, including Safari touch selection and the offline-next-account case at all5 viewport projects. Latest source also guards late direct API responses. All72 node regressions plus sharing and reported-team checks passed. Do not redo completed checks without a new reason.
-2. Read-only live database metadata confirms RLS enabled/anon SELECT absent for5 private tables, all4 roster ownership policies, and profile column privileges (admin promotion false, display-name edit true). Backup39869002881: both backup and isolated recovery jobs success.
-3. Run final complete 100-case browser suite if needed (95 earlier cases plus account-switch case across5 projects). CI will also run the full suite after the production rebuild. Local preview intentionally uses stale prebuilt game matrices; normal production build now rebuilds valid current inputs.
-4. Update test totals and report/progress status, commit/push authorized application fixes, watch the site workflow. Normal rebuild covers current cups AND standard leagues and may take a long time. No optional analytics/security SQL is applied by the workflow.
-5. Verify live assets and behavior after deployment. Obtain specific approval for proposed production SQL, analytics activation/credential/retention and absent admin endpoint deployment, while continuing independent work. Do not claim all work finished until outstanding approvals/verification are honestly reported.
+1. Local105browser suite completed successfully; do not rerun without new changes/failures. Disposable database8cases passed after both migration-source updates.
+2. Commit/push the tested follow-up and verify its queued release/database CI. First release39971805865 succeeded and saved valid data cache; follow-up should reuse it.
+3. Verify deployed commit/assets, free tools, account-field visibility, phone layout, nonzero scores and shared links. Record actual publication; do not claim live fixes prematurely.
+4. Keep analytics off as chosen. Finish plain-English results/report links/limits. Stop completion heartbeat only once authorized work is actually complete.
 
 ## Boundaries
 
-Do not print credentials, access customer rosters, attack third-party systems, silently discard/migrate user data, or change production security policies without approval. Pending approvals must not stop unrelated authorized work. Do not announce bug fixes in What's New. Preserve badge sizes, visible grades, full names/moves and the free website model.
+No secrets printed, customer roster testing, third-party attacks, silent data discard/migration, or production security changes beyond approved report-limit fix. Continue independent work when approval needed. Preserve all free tools and visual identity. No getting-started guide or bug-fix What's New entry.

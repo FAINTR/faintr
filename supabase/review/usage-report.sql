@@ -3,7 +3,7 @@
 select count(distinct visitor) as consented_unique_browsers,
  count(distinct session) as sessions,
  count(*) filter(where event='page_view') as tool_page_views,
- count(distinct visitor) filter(where returning) as returning_browsers
+ count(distinct visitor) filter(where is_returning) as returning_browsers
 from faintr_usage.events where received_at>now()-interval '30 days';
 
 with sessions as (
