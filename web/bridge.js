@@ -7,6 +7,7 @@
   const CFG = window.FAINTR_CONFIG || {};
   // Pure account tools are bundled into the bridge by the site builder.
   const VIP = window.FAINTR_VIP_TOOLS;
+  const patches = window.FAINTR_STORAGE_PATCHES;
   const LS = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } } };
   const listeners = new Set();
@@ -24,14 +25,15 @@
   const needAccount = () => { throw new Error('Sign in to save Pokémon to your Roster. Each account has its own.'); };
   const local = {
     rosterAll: async () => (sbReady ? [] : LS.get(KEY_R, [])),
-    rosterUpsert: async (e) => { if (sbReady) needAccount(); return local.rosterUpsertMany([e]).then(() => e); },
+    rosterUpsert: async (e,expected) => { if (sbReady) needAccount();patches.assertCurrent(LS.get(KEY_R,[]).find(x=>x.uid===e.uid),expected); return local.rosterUpsertMany([e]).then(() => e); },
     rosterUpsertMany: async (list) => {
       if (sbReady) needAccount();
       const l = LS.get(KEY_R, []);
       for (const e of list) { const i = l.findIndex((x) => x.uid === e.uid); if (i >= 0) l[i] = e; else l.push(e); }
       if (!LS.set(KEY_R, l)) throw new Error('This browser is out of storage space.');
     },
-    rosterRemove: async (uid) => { if (sbReady) needAccount(); const l = LS.get(KEY_R, []); const gone = l.find((x) => x.uid === uid) || null; LS.set(KEY_R, l.filter((x) => x.uid !== uid)); return gone; },
+    rosterInsertMany: async list=>{if(sbReady)needAccount();if(!LS.set(KEY_R,patches.insertRoster(LS.get(KEY_R,[]),list)))throw Error('This browser is out of storage space.');},
+    rosterRemove: async (uid) => { if (sbReady) needAccount(); const l = LS.get(KEY_R, []); const gone = l.find((x) => x.uid === uid) || null; if(!LS.set(KEY_R, l.filter((x) => x.uid !== uid)))throw Error('Could not remove this Pokémon because browser storage is unavailable.'); return gone; },
     savedAll: async () => LS.get(KEY_S, []),
     savedUpsert: async (t) => local.savedUpsertMany([t]).then(() => t),
     savedUpsertMany: async (list) => {
@@ -39,7 +41,9 @@
       for (const t of list) { const i = l.findIndex((x) => x.id === t.id); if (i >= 0) l[i] = t; else l.push(t); }
       if (!LS.set(KEY_S, l)) throw new Error('This browser is out of storage space. Sign in to save teams to your account.');
     },
-    savedRemove: async (id) => { LS.set(KEY_S, LS.get(KEY_S, []).filter((x) => x.id !== id)); },
+    savedRemove: async (id) => { if(!LS.set(KEY_S, LS.get(KEY_S, []).filter((x) => x.id !== id)))throw Error('Could not remove this team because browser storage is unavailable.'); },
+    rosterRefreshMany: async updates=>{if(sbReady)needAccount();if(!LS.set(KEY_R,patches.refresh(LS.get(KEY_R,[]),updates,'roster')))throw Error('This browser is out of storage space.');},
+    savedRefreshMany: async updates=>{if(!LS.set(KEY_S,patches.refresh(LS.get(KEY_S,[]),updates,'saved')))throw Error('This browser is out of storage space.');},
   };
 
   // Signed in: everything the trainer saves is ONE row in user_storage (roster and teams as JSON).
@@ -95,13 +99,16 @@
       throw new Error('Your data changed on another device. Reload the page and try again.');
     },
     rosterAll: async () => (await cloud.load()).roster,
-    rosterUpsert: (e) => cloud.rosterUpsertMany([e]).then(() => e),
+    rosterInsertMany: list=>cloud.change(d=>{d.roster=patches.insertRoster(d.roster,list);}),
+    rosterUpsert: (e,expected) => cloud.change(d=>{const i=d.roster.findIndex(x=>x.uid===e.uid);patches.assertCurrent(d.roster[i],expected);if(i>=0)d.roster[i]=e;else d.roster.push(e);return e;}),
     rosterUpsertMany: (list) => cloud.change((d) => { for (const e of list) { const i = d.roster.findIndex((x) => x.uid === e.uid); if (i >= 0) d.roster[i] = e; else d.roster.push(e); } }),
     rosterRemove: (uid) => cloud.change((d) => { const gone = d.roster.find((x) => x.uid === uid) || null; d.roster = d.roster.filter((x) => x.uid !== uid); return gone; }),
     savedAll: async () => (await cloud.load()).teams,
     savedUpsert: (t) => cloud.savedUpsertMany([t]).then(() => t),
     savedUpsertMany: (list) => cloud.change((d) => { for (const t of list) { const i = d.teams.findIndex((x) => x.id === t.id); if (i >= 0) d.teams[i] = t; else d.teams.push(t); } }),
     savedRemove: (id) => cloud.change((d) => { d.teams = d.teams.filter((x) => x.id !== id); }),
+    rosterRefreshMany: updates=>cloud.change(d=>{d.roster=patches.refresh(d.roster,updates,'roster');}),
+    savedRefreshMany: updates=>cloud.change(d=>{d.teams=patches.refresh(d.teams,updates,'saved');}),
   };
   const billing = {
     enabled: false,
@@ -152,34 +159,61 @@
   }
 
   // ---------- core worker
-  let reqId = 0;
+  let reqId = 0, authEpoch = 0;
   const waiting = new Map();
   let readyResolve, readyReject;
   const ready = new Promise((res, rej) => { readyResolve = res; readyReject = rej; });
+  function rejectPending(error) {
+    for(const p of waiting.values())p.reject(error);
+    waiting.clear();
+  }
   async function startWorker() {
-    const r = await fetch('/manifest.json', { cache: 'no-store' });
-    if (!r.ok) throw new Error("FAINTR's data isn't published yet.");
-    state.manifest = await r.json();
+    const epoch=authEpoch;
+    let resolveBoot,rejectBoot;
+    state.workerReady=new Promise((resolve,reject)=>{resolveBoot=resolve;rejectBoot=reject;});
+    state.workerReady.catch(()=>{});
+    state.workerError=null;
+    try {
+    if(!state.manifest) {
+      const r = await fetch('/manifest.json', { cache: 'no-store' });
+      if (!r.ok) throw new Error("FAINTR's data isn't published yet.");
+      state.manifest = await r.json();
+    }
+    if(epoch!==authEpoch)throw new Error('Your account changed. Please try again.');
     const w = new Worker('/' + state.manifest.files['core.js']);
     state.worker = w;
+    const fail=message=>{
+      if(state.worker!==w)return;
+      const error=new Error(message||'The FAINTR engine stopped. Reload the page and try again.');
+      state.workerError=error;rejectBoot(error);readyReject(error);rejectPending(error);
+      w.terminate();
+    };
     w.onmessage = async (e) => {
+      if(state.worker!==w||epoch!==authEpoch)return;
       const m = e.data;
-      if (m.type === 'ready') return readyResolve();
-      if (m.type === 'fatal') return readyReject(new Error(m.error));
+      if (m.type === 'ready') { resolveBoot(); return readyResolve(); }
+      if (m.type === 'fatal') return fail(m.error);
       if (m.type === 'progress') { state.progress = m; emit('progress'); return; }
       if (m.type === 'storage') {
-        try { const result = m.op === 'premiumAnti' ? await premiumAnti(...m.args) : await store()[m.op](...m.args); w.postMessage({ type: 'storage-reply', id: m.id, result }); }
-        catch (err) { w.postMessage({ type: 'storage-reply', id: m.id, error: err.message }); }
+        const reply=payload=>{if(state.worker===w&&epoch===authEpoch)w.postMessage(payload);};
+        try { const result = m.op === 'premiumAnti' ? await premiumAnti(...m.args) : await store()[m.op](...m.args); reply({ type: 'storage-reply', id: m.id, result }); }
+        catch (err) { reply({ type: 'storage-reply', id: m.id, error: err.message }); }
         return;
       }
       const p = waiting.get(m.id); if (!p) return;
       waiting.delete(m.id);
       if (m.error) { const err = new Error(m.error); err.code = m.code; err.stale = m.stale; p.reject(err); } else p.resolve(m.result);
     };
-    w.onerror = (e) => readyReject(new Error(e.message || 'The FAINTR engine failed to start.'));
+    w.onerror = () => fail('The FAINTR engine stopped. Reload the page and try again.');
     w.postMessage({ type: 'init', manifest: state.manifest });
+    } catch(error) { rejectBoot(error);if(epoch===authEpoch){state.workerError=error;readyReject(error);rejectPending(error);}throw error; }
+    return state.workerReady;
   }
-  function callCore(method, path, q, body) {
+  async function callCore(method, path, q, body) {
+    const epoch=authEpoch;
+    await state.workerReady;
+    if(epoch!==authEpoch)throw new Error('Your account changed. Please try again.');
+    if(state.workerError)throw state.workerError;
     return new Promise((resolve, reject) => {
       const id = ++reqId;
       waiting.set(id, { resolve, reject });
@@ -188,8 +222,15 @@
   }
 
   // ---------- the API app.js talks to
-  async function api(url, body) {
+  async function api(url,body){
+    const epoch=authEpoch,result=await dispatchApi(url,body);
+    if(epoch!==authEpoch)throw new Error('Your account changed. Please try again.');
+    return result;
+  }
+  async function dispatchApi(url, body) {
+    const epoch=authEpoch;
     await ready;
+    if(epoch!==authEpoch)throw new Error('Your account changed. Please try again.');
     const u = new URL(url, location.origin);
     const p = u.pathname, q = Object.fromEntries(u.searchParams), method = body === undefined ? 'GET' : 'POST';
     if (p.startsWith('/api/vip/')) {
@@ -216,6 +257,7 @@
       // Empty lists let free browsing start without loading private account data.
       if (!billing.hasAccess() && method === 'GET' && (p === '/api/roster' || p === '/api/saved')) return [];
       requirePremium();
+      if(state.user&&method==='GET'&&(p==='/api/roster'||p==='/api/saved'))await cloud.load(true);
     }
     // Website-only answers
     if (p === '/api/status') {
@@ -244,14 +286,28 @@
   async function loadProfile() {
     state.profile = null;
     if (!state.user) return;
-    const { data } = await state.sb.from('profiles').select('display_name, is_admin').eq('id', state.user.id).maybeSingle();
-    state.profile = data || { display_name: null, is_admin: false };
+    const userId=state.user.id;
+    const { data } = await state.sb.from('profiles').select('display_name, is_admin').eq('id', userId).maybeSingle();
+    if(state.user?.id===userId)state.profile = data || { display_name: null, is_admin: false };
   }
   async function onAuth(session) {
     const was = state.user && state.user.id;
     state.user = session ? session.user : null;
     state.doc = null;
     if ((state.user && state.user.id) !== was) {
+      authEpoch++;
+      // Undo buffers and in-flight jobs belong to the account that created them.
+      // Replace that worker so delayed storage calls cannot cross an account switch.
+      if(state.worker||state.workerReady) {
+        if(state.worker)state.worker.terminate();state.worker=null;
+        rejectPending(new Error('Your account changed. Please try again.'));
+        startWorker().catch(()=>{});
+      }
+      if(was)try{localStorage.removeItem(`faintr.cloud.${was}`);}catch(_){}
+      state.profile=null;
+      // Clear the previous account's visible data before a profile/network lookup
+      // can delay the normal signed-in notification.
+      emit('auth-changing');
       state.membership = { active: false };
       await billing.refresh().catch(() => {});
       await loadProfile().catch(() => {});
@@ -270,7 +326,7 @@
     async oauth(provider) { const { error } = await state.sb.auth.signInWithOAuth({ provider, options: { redirectTo: location.origin } }); if (error) throw error; },
     async resetPassword(email) { const { error } = await state.sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin }); if (error) throw error; },
     async updatePassword(password) { const { error } = await state.sb.auth.updateUser({ password }); if (error) throw error; },
-    async signOut() { try { if (state.user) localStorage.removeItem(cacheKey()); } catch (e) { /* ignore */ } await state.sb.auth.signOut(); },
+    async signOut() { const {error}=await state.sb.auth.signOut();if(error)throw new Error('Could not sign out. Please retry before leaving this device.');try{if(state.user)localStorage.removeItem(cacheKey());}catch(_){} },
     async setName(name) {
       const { error } = await state.sb.from('profiles').update({ display_name: String(name).slice(0, 40) }).eq('id', state.user.id);
       if (error) throw error;

@@ -31,7 +31,9 @@
       "threevthree.js",
       "engine_glue.js",
       "teamcodec.js",
-      "appcore.js"
+      "appcore.js",
+      "team-rules.js",
+      "http-safety.js"
     ],
     "assets": [
       "assets/**/*",
@@ -53,6 +55,6 @@
     "@playwright/test": "1.64.1",
     "@supabase/supabase-js": "^2.117.2",
     "@yao-pkg/pkg": "^6.23.0",
-    "esbuild": "^0.24.0"
+    "esbuild": "^0.28.2"
   }
 }

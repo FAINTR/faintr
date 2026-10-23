@@ -22,6 +22,7 @@ const title = () => (S.fmt ? S.fmt.title : 'Great League');
 
 const WEB = !!window.FAINTR_BRIDGE; // the website runs the engine in the browser; the desktop app has a local server
 const CFG = window.FAINTR_CONFIG || {};
+const usage=(event,tool)=>window.FAINTR_ANALYTICS?.track(event,tool);
 const PREMIUM = false;
 function hasPremium() { return !PREMIUM || window.FAINTR_BRIDGE.billing.hasAccess(); }
 function needPremium() { if (hasPremium()) return false; openPremium(); return true; }
@@ -30,7 +31,13 @@ async function api(path, body, opts = {}) {
   if (body === undefined) { if (!opts.noF) url += (path.includes('?') ? '&' : '?') + 'f=' + encodeURIComponent(S.f); }
   else if (body && typeof body === 'object' && !Array.isArray(body) && body.f === undefined && !opts.noF) body = { ...body, f: S.f };
   if (WEB) {
-    try { return await window.FAINTR_BRIDGE.api(url, body); } catch (e) { if (e.code === 402) openPremium(); const err = new Error(e.message || 'Something went wrong.'); err.needsBuild = e.code === 409; throw err; }
+    try {
+      const result=await window.FAINTR_BRIDGE.api(url, body);
+      if(body!==undefined&&path==='/api/roster')usage('roster_saved','roster');
+      if(body!==undefined&&path==='/api/roster/import'&&result.added>0)usage('roster_imported','roster');
+      if(body!==undefined&&path==='/api/saved')usage('team_saved','saved');
+      return result;
+    } catch (e) { if (e.code === 402) openPremium(); const err = new Error(e.message || 'Something went wrong.'); err.needsBuild = e.code === 409; throw err; }
   }
   const r = await fetch(url, body !== undefined ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
   const j = await r.json().catch(() => ({ error: "FAINTR isn't answering. Is its window still open?" }));
@@ -47,6 +54,14 @@ function card(grades) {
   return `<div class="card"><div><div class="setname">PvPoke grades</div><div class="set">${KEYS.filter((k) => G[k].pvpoke).map(tile).join('')}</div></div>
     <div><div class="setname">FAINTR team checks</div><div class="set">${KEYS.filter((k) => !G[k].pvpoke).map(tile).join('')}</div></div></div>`;
 }
+function fitResultTables(root) {
+  $$('table',root).forEach(table=>{
+    let frame=table.closest('.scroll');
+    if(!frame){frame=document.createElement('div');frame.className='scroll result-table';table.before(frame);frame.append(table);}
+    frame.tabIndex=0;frame.setAttribute('role','region');
+    if(!frame.hasAttribute('aria-label'))frame.setAttribute('aria-label','Detailed results; scroll horizontally if needed');
+  });
+}
 // Overall score, colored by where it ranks among every team in this league or cup
 function scoreBadge(composite, tier, under, ftitle) {
   const t = tier || { key: 'fair', label: '' };
@@ -59,16 +74,21 @@ function monCell(m, role) {
 }
 
 const fullSource = () => S.full || [];
+let pickerSequence=0;
 function picker(el, onPick, sourceFn) {
   const input = $('input', el), box = $('.suggest', el);
-  let hl = -1, items = [];
-  const close = () => { box.hidden = true; hl = -1; };
+  box.id=`picker-${++pickerSequence}-list`;box.setAttribute('role','listbox');
+  input.setAttribute('role','combobox');input.setAttribute('aria-autocomplete','list');input.setAttribute('aria-controls',box.id);input.setAttribute('aria-expanded','false');input.autocomplete='off';
+  let hl = -1, items = [],touch=null;
+  const close = () => { box.hidden = true; hl = -1;items=[];input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant'); };
   const render = () => {
     const q = input.value.trim().toLowerCase();
     items = q ? sourceFn().filter((p) => p.name.toLowerCase().includes(q) || p.id.includes(q.replace(/\s+/g, '_')) || String(p.dex) === q).slice(0, 40) : [];
-    box.innerHTML = items.map((p, i) => `<button type="button" data-i="${i}" class="${i === hl ? 'hl' : ''}">${esc(p.name)}${typeDots(p.types)}${p.rank && p.rank < 9999 ? `<span class="rk">#${p.rank}</span>` : ''}</button>`).join('')
+    box.innerHTML = items.map((p, i) => `<button type="button" role="option" tabindex="-1" id="${box.id}-${i}" aria-selected="${i===hl}" data-i="${i}" class="${i === hl ? 'hl' : ''}">${esc(p.name)}${typeDots(p.types)}${p.rank && p.rank < 9999 ? `<span class="rk">#${p.rank}</span>` : ''}</button>`).join('')
       || (q.length > 1 && sourceFn !== fullSource && el.dataset.scope !== 'all' ? `<div class="nomatch">No ${esc(title())} Pokémon match "${esc(input.value.trim())}". Is it eligible here? Switch league or cup at the top.</div>` : '');
     box.hidden = !box.innerHTML;
+    input.setAttribute('aria-expanded',String(!box.hidden));
+    if(hl>=0&&items[hl]){input.setAttribute('aria-activedescendant',`${box.id}-${hl}`);box.querySelector('.hl')?.scrollIntoView({block:'nearest'});}else input.removeAttribute('aria-activedescendant');
   };
   const pick = (p) => { onPick(p); input.value = ''; close(); };
   input.addEventListener('input', () => { hl = -1; render(); });
@@ -78,7 +98,10 @@ function picker(el, onPick, sourceFn) {
     else if (e.key === 'Enter' && items.length) { pick(items[Math.max(0, hl)]); e.preventDefault(); }
     else if (e.key === 'Escape') close();
   });
-  box.addEventListener('mousedown', (e) => { const b = e.target.closest('button'); if (b) { pick(items[+b.dataset.i]); e.preventDefault(); } });
+  box.addEventListener('pointerdown',e=>{const b=e.target.closest('button');if(b){touch=e.pointerType==='touch'?{x:e.clientX,y:e.clientY,index:+b.dataset.i}:null;e.preventDefault();}});
+  box.addEventListener('pointerup',e=>{if(e.pointerType==='touch'&&touch){const chosen=touch;touch=null;if(Math.hypot(e.clientX-chosen.x,e.clientY-chosen.y)<10&&items[chosen.index]){pick(items[chosen.index]);e.preventDefault();}}});
+  box.addEventListener('pointercancel',()=>{touch=null;});
+  box.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b&&items[+b.dataset.i]) { pick(items[+b.dataset.i]); e.preventDefault(); } });
   input.addEventListener('blur', () => setTimeout(close, 150));
 }
 
@@ -137,6 +160,7 @@ function renderFormatBar() {
   const groups = [['Leagues', rest.filter((f) => f.kind === 'league')], ...['Little', 'Great', 'Ultra', 'Master'].map((g) => [g === 'Little' ? 'Little Cup (500 CP)' : `${g} League cups`, rest.filter((c) => c.kind === 'cup' && c.league === g)])].filter(([, c]) => c.length);
   $('#cupSel').innerHTML = `<option value="">More leagues and cups (${rest.length})</option>` + groups.map(([g, c]) => `<optgroup label="${g}">${c.map((x) => `<option value="${x.key}" ${x.key === S.f ? 'selected' : ''}>${esc(x.title)}${x.built ? '' : ' (not set up)'}</option>`).join('')}</optgroup>`).join('');
   $('#cupSel').classList.toggle('on', !liveKeys.has(S.f));
+  $('#cupSel').disabled=false;
   const L = S.info.live;
   $('#fmtLabel').textContent = L && L.now ? 'Live now' : 'League';
   $('#fmtLabel').title = L && L.now ? `GO Battle League ${L.season ? `(${L.season}) ` : ''}until ${new Date(L.now.end).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}${L.next ? `. Next: ${L.next.formats.map((f) => f.label).join(', ')}` : ''}` : '';
@@ -388,10 +412,10 @@ function monEditor(el, opts = {}) {
   el.innerHTML = `<div class="pickrow"><div class="picker"><input type="text" placeholder="Search Pokémon" aria-label="${esc(opts.label || 'Pokémon')}"><div class="suggest" hidden></div></div>
     <select class="fromRoster" aria-label="Load from your Roster" title="Load one of your saved Pokémon"></select></div>
     <div class="editor-details"${opts.compactEmpty ? ' hidden' : ''}><div class="picked note">None picked yet.</div>
-    <label class="field">Fast move</label><select data-m="0" disabled></select>
-    <label class="field">Charged move 1</label><select data-m="1" disabled></select>
-    <label class="field">Charged move 2</label><select data-m="2" disabled></select>
-    <label class="field" data-third-charge hidden>Additional charged move</label><select data-m="3" hidden disabled></select>
+    <label class="field">Fast move</label><select data-m="0" aria-label="${esc(opts.label||'Pokémon')} fast move" disabled></select>
+    <label class="field">Charged move 1</label><select data-m="1" aria-label="${esc(opts.label||'Pokémon')} charged move 1" disabled></select>
+    <label class="field">Charged move 2</label><select data-m="2" aria-label="${esc(opts.label||'Pokémon')} charged move 2" disabled></select>
+    <label class="field" data-third-charge hidden>Additional charged move</label><select data-m="3" aria-label="${esc(opts.label||'Pokémon')} additional charged move" hidden disabled></select>
     <div class="ivbox"><div class="ivrow">
       <label>Attack<input type="number" min="0" max="15" data-iv="atk" disabled></label>
       <label>Defense<input type="number" min="0" max="15" data-iv="def" disabled></label>
@@ -486,11 +510,14 @@ function monEditor(el, opts = {}) {
 /* ======================= TEAM GRADER ======================= */
 const slots = [];
 let lastReport = null;
+let builderSeen=0;
+function builderProgress(){const count=slots.filter(s=>s.value()).length;if(count&&!builderSeen){usage('builder_started','grade');builderSeen=1;}if(count===3&&builderSeen<2){usage('builder_completed','grade');builderSeen=2;}}
 function buildSlots() {
+  builderSeen=0;
   $('#slots').innerHTML = ROLES.map((r, i) => `<div class="slot panel" data-s="${i}"><div class="slothead"><h3>${r}</h3>
       <span class="slotmove">${i > 0 ? `<button type="button" class="btn small quiet" data-move="${i}" data-dir="-1" title="Swap with ${ROLES[i - 1]}" aria-label="Swap with ${ROLES[i - 1]}">◀</button>` : ''}${i < 2 ? `<button type="button" class="btn small quiet" data-move="${i}" data-dir="1" title="Swap with ${ROLES[i + 1]}" aria-label="Swap with ${ROLES[i + 1]}">▶</button>` : ''}</span></div><div class="ed"></div></div>`).join('');
   $$('#slots .slot').forEach((el, i) => {
-    slots[i] = monEditor($('.ed', el), { compactEmpty: true, label: ROLES[i], onChange: () => { const v = slots[i].value(); if (v) api('/api/prefetch', v).catch(() => {}); },
+    slots[i] = monEditor($('.ed', el), { compactEmpty: true, label: ROLES[i], onChange: () => { builderProgress();const v = slots[i].value(); if (v) api('/api/prefetch', v).catch(() => {}); },
       // Picking a Pokemon that's already in another slot swaps the two slots
       beforeSet: (p, preset) => {
         const j = slots.findIndex((sl, k) => k !== i && sl.value() && sl.value().id === p.id);
@@ -545,14 +572,16 @@ async function runGrade() {
   if (members.some((m) => !m)) { $('#gradeStatus').textContent = 'Pick a Pokémon for all three slots first.'; return; }
   if (!S.fmt.built) { $('#gradeStatus').innerHTML = needsBuildMsg(); return; }
   $('#gradeBtn').disabled = true;
+  usage('grade_started','grade');
   $('#gradeStatus').innerHTML = `<span class="spin"></span> Battling every ${esc(title())} Pokémon at 0, 1 and 2 shields`;
   try {
     const d = await api('/api/report', { members, weights: S.weights });
     lastReport = d;
     $('#gradeStatus').textContent = '';
     renderReport(d);
+    usage('grade_completed','grade');
     $('#saveBtn').disabled = false;
-  } catch (e) { $('#gradeStatus').innerHTML = e.needsBuild ? needsBuildMsg() : esc(e.message); }
+  } catch (e) { usage('action_failed','grade');$('#gradeStatus').innerHTML = e.needsBuild ? needsBuildMsg() : esc(e.message); }
   $('#gradeBtn').disabled = false;
 }
 $('#saveBtn').addEventListener('click', async () => {
@@ -607,7 +636,7 @@ function renderReport(d) {
     <div class="scroll"><table class="t"><thead><tr><th>Top 40 meta</th>${d.members.map((m) => `<th class="n">${esc(m.name)}</th>`).join('')}<th class="n">Your best</th></tr></thead>
     <tbody>${d.heat.map((h) => { const r = h.r.map((x) => x[s]); const b = Math.max(...r); return `<tr><td>${esc(h.name)}</td>${r.map((x) => `<td class="n ${cls(x)}">${x}</td>`).join('')}<td class="n ${cls(b)}"><b>${b}</b></td></tr>`; }).join('')}</tbody></table></div>`;
   v('matchups').innerHTML = heat(1);
-  v('matchups').addEventListener('click', (e) => { const b = e.target.closest('#heatSeg button'); if (b) v('matchups').innerHTML = heat(+b.dataset.s); });
+  v('matchups').addEventListener('click', (e) => { const b = e.target.closest('#heatSeg button'); if (b) {v('matchups').innerHTML = heat(+b.dataset.s);fitResultTables(v('matchups'));} });
   // Threats
   v('threats').innerHTML = `<div class="twocol"><div><h3 style="margin:0 0 6px">PvPoke's top threats</h3><p class="hint">The six counters that drive the Coverage grade, and your rating against each (average of 0 and 1 shields).</p>
       <table class="t"><thead><tr><th>Threat</th>${d.members.map((m) => `<th class="n">${esc(m.name)}</th>`).join('')}</tr></thead><tbody>
@@ -666,6 +695,7 @@ function renderReport(d) {
     $$('.subtabs button', $('#gradeResult')).forEach((x) => x.setAttribute('aria-selected', x === b));
     $$('[data-subview]', $('#gradeResult')).forEach((x) => { x.hidden = x.dataset.subview !== b.dataset.sub; });
   });
+  fitResultTables($('#gradeResult'));
 }
 function showToast(msg, action) {
   const t = $('#toast');
@@ -723,6 +753,7 @@ async function runBattle() {
   const a = bs[0].ed.value(), b = bs[1].ed.value();
   if (!a || !b) { $('#battleStatus').textContent = 'Pick a Pokémon on both sides first.'; return; }
   const oa = sideOpts(0), ob = sideOpts(1);
+  usage('simulation_started','battle');
   $('#battleStatus').innerHTML = '<span class="spin"></span> Battling';
   try {
     const body = { a, b, shieldsA: oa.shields, shieldsB: ob.shields, baitA: oa.bait, baitB: ob.bait, energyA: oa.energy, energyB: ob.energy };
@@ -734,7 +765,8 @@ async function runBattle() {
     ]);
     $('#battleStatus').textContent = '';
     renderBattle(r, { def, r1 });
-  } catch (e) { $('#battleStatus').textContent = e.message; }
+    usage('simulation_completed','battle');
+  } catch (e) { usage('action_failed','battle');$('#battleStatus').textContent = e.message; }
 }
 function hpSeries(r) {
   // Walk the timeline: each attack event's first value is damage dealt to the other side
@@ -773,7 +805,7 @@ function timelineSVG(r) {
     for (let i = 1; i < p.length; i++) d += ` H${x(p[i].t).toFixed(1)} V${hy(p[i].hp, side).toFixed(1)}`;
     return `<path d="${d} H${x(maxT).toFixed(1)}" fill="none" stroke="${col[side]}" stroke-width="2.2"/>`;
   };
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Battle timeline">
+  return `<div class="timeline-scroll" role="region" tabindex="0" aria-label="Battle timeline; scroll horizontally to read the full chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Battle timeline">
     <text x="0" y="${lane[0] + 4}" font-size="13.5" fill="var(--ink)" font-weight="600">${esc(r.a.name.slice(0, 11))}</text>
     <text x="0" y="${lane[1] + 4}" font-size="13.5" fill="var(--ink)" font-weight="600">${esc(r.b.name.slice(0, 11))}</text>
     <line x1="${padL}" x2="${W - padR}" y1="${lane[0]}" y2="${lane[0]}" stroke="var(--line)"/><line x1="${padL}" x2="${W - padR}" y1="${lane[1]}" y2="${lane[1]}" stroke="var(--line)"/>
@@ -781,7 +813,7 @@ function timelineSVG(r) {
     <text x="0" y="${hpTop + 4}" font-size="12" fill="var(--muted)">Full HP</text><text x="0" y="${hpBot + 4}" font-size="12" fill="var(--muted)">0 HP</text>
     <line x1="${padL}" x2="${W - padR}" y1="${hpTop}" y2="${hpTop}" stroke="var(--line)" stroke-dasharray="3 4"/><line x1="${padL}" x2="${W - padR}" y1="${hpBot}" y2="${hpBot}" stroke="var(--line)"/>
     ${line(0)}${line(1)}
-    <text x="${padL}" y="${H - 8}" font-size="12" fill="var(--muted)">Turn 0</text><text x="${W - padR}" y="${H - 8}" font-size="12" fill="var(--muted)" text-anchor="end">Turn ${maxT}</text></svg>
+    <text x="${padL}" y="${H - 8}" font-size="12" fill="var(--muted)">Turn 0</text><text x="${W - padR}" y="${H - 8}" font-size="12" fill="var(--muted)" text-anchor="end">Turn ${maxT}</text></svg></div>
     <div class="legendrow" style="margin-top:4px"><span><i class="sw" style="background:var(--fr-red)"></i>${esc(r.a.name)} HP</span><span><i class="sw" style="background:var(--data-2)"></i>${esc(r.b.name)} HP</span><span>Gray shield = shield used</span></div>`;
 }
 function renderBattle(r, alt) {
@@ -796,7 +828,7 @@ function renderBattle(r, alt) {
       <div class="side r"><div class="note">Opponent</div><h3 style="margin:2px 0;font-size:24px">${esc(r.b.name)}</h3>
         <div class="rating ${r.ratingB > 500 ? 'w' : 'l'}">${r.ratingB}</div><div class="note">${r.hpB} of ${r.b.stats.hp} HP left, ${r.energyB} energy</div>
         <div class="hpbar r"><i style="width:${(r.hpB / r.b.stats.hp * 100).toFixed(0)}%"></i></div></div></div>
-    <div class="timeline"><p class="note" style="margin:0 0 4px">${esc(title())}. ${r.shields[0]} vs ${r.shields[1]} shields, ${r.turns} turns. Dots are fast moves and colored bars are charged moves, in the move's type color. The lower chart is HP. Hover any mark for details.</p>${timelineSVG(r)}</div>
+    <div class="timeline"><p class="note" style="margin:0 0 4px">${esc(title())}. ${r.shields[0]} vs ${r.shields[1]} shields, ${r.turns} turns. Dots are fast moves and colored bars are charged moves, in the move's type color. The lower chart is HP. Scroll the chart on a phone; the turn-by-turn log below lists every event.</p>${timelineSVG(r)}</div>
     <div class="subview twocol" style="padding-top:0">
       <div><h3 style="margin:0 0 6px">Every shield scenario</h3><p class="hint">Your battle rating with your shields down the side and theirs across.</p>
         <table class="t grid3"><thead><tr><th>You \\ Them</th>${[0, 1, 2].map((j) => `<th class="n">${j}</th>`).join('')}</tr></thead>
@@ -811,6 +843,7 @@ function renderBattle(r, alt) {
           ${r.chargedDamage.b.map((m) => `<tr><td>${esc(m.name)} <span class="note">(${esc(r.b.name)})</span></td><td class="n">${m.damage}</td><td class="n">${m.energy}</td></tr>`).join('')}</tbody></table>
         <details style="margin-top:12px"><summary class="note" style="cursor:pointer">Turn-by-turn log</summary><div class="scroll" style="max-height:300px;margin-top:6px"><table class="t"><thead><tr><th class="n">Turn</th><th>Who</th><th>Event</th><th class="n">Damage</th></tr></thead><tbody>
           ${r.timeline.filter((e) => /^(fast|charged|shield|faint)/.test(e.type)).map((e) => `<tr><td class="n">${e.turn}</td><td>${esc(e.actor ? r.b.name : r.a.name)}</td><td>${esc(e.name)}</td><td class="n">${/^(fast|charged)/.test(e.type) ? e.values[0] : ''}</td></tr>`).join('')}</tbody></table></div></details></div></div></article>`;
+  fitResultTables($('#battleResult'));
 }
 $('#vsMetaBtn').addEventListener('click', async () => {
   const a = bs[0].ed.value();
@@ -869,6 +902,7 @@ async function runCounters() {
 const R = { league: null, view: store.get('faintr.rview') || 'cards' };
 async function loadRoster() {
   S.roster = await api('/api/roster', undefined, { noF: true });
+  $('#rStorageNote').textContent=WEB&&window.FAINTR_BRIDGE.auth.available?(window.FAINTR_BRIDGE.state.user?'Saved to your FAINTR account. Sign in with the same account on another device. Clearing browser data signs you out; it does not erase your saved Roster.':'Sign in to save a private Roster to your account. Your saved Roster returns when you sign in again.'):'Saved only in this browser. Clearing browser data removes this local Roster. Export a copy before switching devices.';
   renderRoster(); ownedNote();
   slots.forEach((s) => s.fillRoster()); bs.forEach((b) => b.ed.fillRoster());
 }
@@ -997,14 +1031,18 @@ $('#rGrid').addEventListener('click', async (ev) => {
   if (act === 'counters') { if (!p) return notHere(); CF.opp = [p]; renderChips('opp'); showView('battle'); setMode('counters'); runCounters(); }
   if (act === 'ivs') { openIVs(e.id, e.ivs, capOf(e)); }
   if (act === 'edit') openRosterForm(e);
-  if (act === 'pin') { await saveRosterPatch(e, { pinned: !e.pinned }); }
+  if (act === 'pin') { try{await saveRosterPatch(e, { pinned: !e.pinned });}catch(error){showToast(`Could not save: ${error.message}`);} }
   if (act === 'del') {
     b.closest('.ract').innerHTML = `<span class="confirm">Remove ${esc(e.nickname || e.name)} from your Roster? <button class="btn small" type="button" data-act="yesdel">Yes, remove</button><button class="btn small quiet" type="button" data-act="keep">Keep it</button></span>`;
   }
   if (act === 'keep') renderRoster();
   if (act === 'yesdel') {
-    await api('/api/roster/delete', { uid: e.uid }, { noF: true }); await loadRoster();
-    showToast(`Removed ${e.nickname || e.name}.`, { label: 'Undo', run: async () => { await api('/api/roster/undo', {}, { noF: true }); loadRoster(); } });
+    b.disabled=true;
+    try{
+      await api('/api/roster/delete', { uid: e.uid }, { noF: true });S.roster=S.roster.filter(x=>x.uid!==e.uid);renderRoster();
+      await loadRoster().catch(error=>showToast(`Removed, but the list could not refresh: ${error.message}`));
+      showToast(`Removed ${e.nickname || e.name}.`, { label: 'Undo', run: async () => { try{await api('/api/roster/undo', {}, { noF: true });await loadRoster();}catch(error){showToast(`Could not undo: ${error.message}`);} } });
+    }catch(error){b.disabled=false;showToast(`Could not remove this Pokémon: ${error.message}`);}
   }
 });
 $('#rGrid').addEventListener('change',async ev=>{
@@ -1017,18 +1055,20 @@ $('#rGrid').addEventListener('change',async ev=>{
 });
 // Save one change to an entry
 async function saveRosterPatch(e, patch) {
-  const body = { ...e, ...patch };
+  const body = { ...e, ...patch, expected:window.FAINTR_STORAGE_PATCHES.contentBasis(e) };
   delete body.eval; delete body.moveNames;
   await api('/api/roster', body, { noF: true }); await loadRoster();
 }
 $('#rExport').addEventListener('click', async (e) => {
   if (!WEB) return; // the desktop server sends the file
   e.preventDefault();
-  const data = await api('/api/roster/export', undefined, { noF: true });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
-  a.download = 'faintr-roster.json'; document.body.appendChild(a); a.click(); a.remove();
+  try{downloadJson(await api('/api/roster/export', undefined, { noF: true }),'faintr-roster.json');usage('roster_exported','roster');}
+  catch(error){showToast(`Could not export your Roster: ${error.message}`);}
 });
+function downloadJson(data,name) {
+  const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(data,null,1)],{type:'application/json'}));
+  a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
 $('#rCopy').addEventListener('click', () => {
   const { lg, list } = rosterList();
   const dex = [...new Set(list.filter((e) => { const l = leagueOf(e, lg); return l && l.eligible !== false && l.status !== 'over'; }).map((e) => e.dex))].filter(Boolean);
@@ -1054,9 +1094,11 @@ $('#rImportFile').addEventListener('change', async (e) => {
   $('#rNote').innerHTML = '<span class="spin"></span> Importing';
   try {
     const j = JSON.parse(text);
-    const r = await api('/api/roster/import', { roster: j.roster || j }, { noF: true });
-    $('#rNote').textContent = `Imported ${r.added} Pokémon.${r.errors.length ? ` Skipped: ${r.errors.join('; ')}` : ''}`;
-    await loadRoster();
+    const entries=j.roster||j;
+    if(!Array.isArray(entries))throw Error('The file needs a Roster array. Nothing was imported.');
+    QA=entries;$('#qText').value='';$('#qAdd').disabled=!QA.length;
+    $('#qPreview').textContent=`Ready to import ${QA.length} Pokémon from ${f.name}. This adds separate copies and does not replace existing Pokémon. Importing the same file again adds copies again.`;
+    $('#qDlg').showModal();$('#rNote').textContent='Review the import before adding it.';
   } catch (err) { $('#rNote').textContent = `That file couldn't be imported: ${err.message}`; }
 });
 
@@ -1078,6 +1120,8 @@ function rfSetSpecies(p, mv) {
   const m = mv && mv.length ? mv : [];
   const opt = (list, sel, first) => `<option value="">${first}</option>` + list.map(([id, name]) => `<option value="${id}" ${id === sel ? 'selected' : ''}>${esc(name)}</option>`).join('');
   $('#rfFast').innerHTML = opt(p.fast, m[0], "PvPoke's pick"); $('#rfC1').innerHTML = opt(p.charged, m[1], "PvPoke's pick"); $('#rfC2').innerHTML = opt(p.charged, m[2] || '', m.length ? 'None' : "PvPoke's pick");
+  $('#rfExtraRow').hidden=!(p.extra||[]).length;
+  $('#rfExtra').innerHTML=opt(p.extra||[],m[3],"PvPoke's pick");$('#rfExtra').disabled=!(p.extra||[]).length;
   ['#rfFast', '#rfC1', '#rfC2'].forEach((s) => { $(s).disabled = false; });
   rfCrest(); rfPreview();
 }
@@ -1098,7 +1142,7 @@ function rfPreview() {
 $('#rfShiny').addEventListener('change', rfCrest);
 async function openRosterForm(e) {
   const full = await fullCatalog();
-  RF.uid = e ? e.uid : null; RF.ball = e ? e.ball : 'poke'; RF.p = null;
+  RF.uid = e ? e.uid : null; RF.ball = e ? e.ball : 'poke'; RF.p = null;RF.expected=e?window.FAINTR_STORAGE_PATCHES.contentBasis(e):undefined;
   $('#rfTitle').textContent = e ? `Edit ${e.nickname || e.name}` : 'Add to Roster';
   RF.leaguesTouched=false;
   const chosen=window.FAINTR_ROSTER_LEAGUES.choices(e||{});
@@ -1129,14 +1173,17 @@ $('#rfCp').addEventListener('input',()=>{
   $$('#rfLeagues input').forEach(box=>box.checked=chosen.includes(+box.value));
 });
 $('#rfSave').addEventListener('click', async () => {
+  if($('#rfSave').disabled)return;
   if (!RF.p) { $('#rfStatus').textContent = 'Pick a Pokémon first.'; return; }
-  const body = { uid: RF.uid, id: RF.p.id, nickname: $('#rfNick').value.trim(), ivs: { atk: +$('#rfAtk').value, def: +$('#rfDef').value, hp: +$('#rfHp').value },
+  const body = { uid: RF.uid, expected:RF.expected, id: RF.p.id, nickname: $('#rfNick').value.trim(), ivs: { atk: +$('#rfAtk').value, def: +$('#rfDef').value, hp: +$('#rfHp').value },
     cp: $('#rfCp').value ? +$('#rfCp').value : null, levelCap: $('#rfBuddy').checked ? 51 : 50, shiny: $('#rfShiny').checked, ball: RF.ball,
     notes: $('#rfNotes').value.trim(), pinned: $('#rfPin').checked,
     leagues: $$('#rfLeagues input:checked').map(box=>+box.value),
-    moveset: $('#rfFast').value && $('#rfC1').value ? [$('#rfFast').value, $('#rfC1').value, $('#rfC2').value].filter(Boolean) : [] };
+    moveset: $('#rfFast').value && $('#rfC1').value ? [$('#rfFast').value, $('#rfC1').value, $('#rfC2').value,...($('#rfExtra').value?[$('#rfExtra').value]:[])].filter(Boolean) : [] };
   $('#rfStatus').innerHTML = '<span class="spin"></span> Saving';
-  try { await api('/api/roster', body, { noF: true }); $('#rDlg').close(); await loadRoster(); showToast(RF.uid ? 'Saved.' : `Added ${RF.p.name} to your Roster.`); } catch (e) { $('#rfStatus').textContent = e.message; }
+  $('#rfSave').disabled=true;
+  try { const saved=await api('/api/roster', body, { noF: true });RF.uid=saved.uid;RF.expected=window.FAINTR_STORAGE_PATCHES.contentBasis(saved);$('#rDlg').close();showToast('Saved to your Roster.');await loadRoster().catch(e=>showToast(`Saved, but the list could not refresh: ${e.message}`)); } catch (e) { $('#rfStatus').textContent = e.message; }
+  finally{$('#rfSave').disabled=false;}
 });
 
 /* ---------- Quick add */
@@ -1144,24 +1191,37 @@ let QA = [];
 $('#rQuick').addEventListener('click', () => { $('#qPreview').innerHTML = ''; $('#qAdd').disabled = true; $('#qDlg').showModal(); $('#qText').focus(); });
 $('#qClose').addEventListener('click', () => $('#qDlg').close());
 $('#qCheck').addEventListener('click', async () => {
+  $('#qCheck').disabled=true;
+  try{
   const r = await api('/api/roster/parse', { text: $('#qText').value }, { noF: true });
   const full = await fullCatalog();
   QA = r.entries;
   $('#qPreview').innerHTML = (QA.length ? `<p>Ready to add ${QA.length}: ${QA.map((x) => `${esc((full.find((c) => c.id === x.id) || {}).name || x.id)} ${x.ivs.atk}/${x.ivs.def}/${x.ivs.hp}${x.cp ? ` CP ${x.cp}` : ''}${x.shiny ? ' (shiny)' : ''}`).join(', ')}.</p>` : '')
     + (r.bad.length ? `<p>Couldn't read: ${r.bad.map(esc).join('; ')}. Each line needs a Pokémon name and three IVs like 0/15/15.</p>` : '');
   $('#qAdd').disabled = !QA.length;
+  }catch(error){$('#qPreview').textContent=`Could not check these entries: ${error.message}`;}
+  finally{$('#qCheck').disabled=false;}
 });
 $('#qAdd').addEventListener('click', async () => {
   $('#qAdd').disabled = true;
-  let n = 0;
+  let n = 0,problem='';
   // In batches: one save per batch, with progress
-  for (let k = 0; k < QA.length; k += 25) {
-    try { const r = await api('/api/roster/import', { roster: QA.slice(k, k + 25).map((x) => ({ ball: 'poke', ...x })) }, { noF: true }); n += r.added; if (r.errors.length && /holds up to/.test(r.errors[r.errors.length - 1])) { showToast(r.errors[r.errors.length - 1]); break; } } catch (e) { showToast(e.message); break; }
-    $('#qPreview').innerHTML = `<span class="spin"></span> Added ${n} of ${QA.length}`;
+  while(QA.length) {
+    const batch=QA.slice(0,25);
+    for(const entry of batch)if(entry&&typeof entry==='object'&&!Array.isArray(entry))entry._importKey ||= crypto.randomUUID();
+    try {
+      const r=await api('/api/roster/import',{roster:batch.map(x=>({ball:'poke',...x}))},{noF:true});n+=r.added;
+      QA=(r.rejected||[]).map(index=>batch[index]).concat(QA.slice(batch.length));
+      if(r.errors.length){problem=r.errors.join('; ');break;}
+    } catch(e){problem=e.message;break;}
+    $('#qPreview').innerHTML=`<span class="spin"></span> Added ${n}; ${QA.length} remaining`;
   }
-  $('#qDlg').close(); $('#qText').value = ''; await loadRoster();
+  await loadRoster().catch(error=>showToast(error.message));
+  if(problem){$('#qPreview').innerHTML=`<p role="alert">Added ${n}. ${QA.length} entries remain pending. ${esc(problem)}</p><p>Your pending entries are kept here; retry or download them before closing.</p><button type="button" class="btn" id="qDownloadPending">Download pending entries</button>`;$('#qAdd').disabled=!QA.length;return;}
+  $('#qDlg').close(); $('#qText').value = '';
   $('#rNote').textContent = `Added ${n} Pokémon. Edit any card to set its moves and ball.`;
 });
+$('#qDlg').addEventListener('click',e=>{if(e.target.id==='qDownloadPending')downloadJson({app:'FAINTR',roster:QA},'faintr-pending-roster.json');});
 
 /* ======================= PVP IVS ======================= */
 const IVS = { p: null, cp: null, table: null, key: '', limit: 100, fam: null, seq: 0 };
@@ -1212,6 +1272,7 @@ async function refreshIVs() {
   if ([v.atk, v.def, v.hp].some((x) => !(x >= 0 && x <= 15) || !Number.isInteger(x))) { $('#ivOut').innerHTML = '<p class="note" style="padding:16px">IVs are whole numbers from 0 to 15.</p>'; return; }
   const seq = ++IVS.seq, cp = ivLeague(), cap = +$('#ivCap').value, floor = +$('#ivFloor').value;
   const key = `${IVS.p.id}|${cp}|${cap}|${floor}`;
+  usage('iv_started','ivs');
   $('#ivOut').innerHTML = '<p class="note" style="padding:16px"><span class="spin"></span> Ranking every IV combination</p>';
   try {
     const [table, fam] = await Promise.all([
@@ -1221,6 +1282,7 @@ async function refreshIVs() {
     if (seq !== IVS.seq) return;
     IVS.table = table; IVS.key = key; IVS.fam = fam;
     renderIvOut(); renderIvFamily(); renderIvTable();
+    usage('iv_completed','ivs');
   } catch (e) { if (seq === IVS.seq) $('#ivOut').innerHTML = `<p class="note" style="padding:16px">${esc(e.message)}</p>`; }
 }
 function myIvRow() { const v = ivVals(); return IVS.table.rows.find((r) => r[1] === v.atk && r[2] === v.def && r[3] === v.hp); }
@@ -1394,7 +1456,11 @@ function md(text) {
   closeTo(0);
   return html;
 }
-async function loadNews() { const r = await fetch('/changelog.md'); $('#changelog').innerHTML = md(await r.text()); }
+async function loadNews() {
+  const box=$('#changelog');box.innerHTML='<p role="status">Loading updates…</p>';
+  try{const r=await fetch('/changelog.md');if(!r.ok)throw Error('Updates are temporarily unavailable. Open this tab again to retry.');box.innerHTML=md(await r.text());}
+  catch(e){box.textContent=e.message||'Could not load updates. Open this tab again to retry.';}
+}
 
 /* ======================= DATA + UPDATES ======================= */
 function fmtVersion(v) {
@@ -1636,6 +1702,8 @@ if (WEB) {
   $('#authMode').addEventListener('click', (e) => { const b = e.target.closest('button[data-m]'); if (b) setAuthMode(b.dataset.m); });
   $('#authForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    if($('#authGo').disabled)return;
+    $('#authGo').disabled=true;
     const A = window.FAINTR_BRIDGE.auth, email = $('#authEmail').value.trim(), pass = $('#authPass').value;
     $('#authStatus').innerHTML = '<span class="spin"></span> One moment';
     try {
@@ -1644,6 +1712,7 @@ if (WEB) {
         $('#authStatus').textContent = r.session ? 'Account created. You are signed in.' : 'Check your email to confirm your account, then sign in.';
       } else { await A.signIn(email, pass); $('#authDlg').close(); showToast('Signed in.'); }
     } catch (err) { $('#authStatus').textContent = err.message; }
+    finally{$('#authGo').disabled=false;}
   });
   $('#authMagic').addEventListener('click', async () => {
     const email = $('#authEmail').value.trim(); if (!email) { $('#authStatus').textContent = 'Enter your email first.'; return; }
@@ -1664,7 +1733,8 @@ if (WEB) {
   $('#authDeleteYes').addEventListener('click', async () => {
     try { await window.FAINTR_BRIDGE.auth.deleteAccount(); $('#authDlg').close(); showToast('Your account and everything in it were deleted.'); } catch (err) { $('#authStatus2').textContent = err.message; }
   });
-  $('#authSignOut').addEventListener('click', async () => { await window.FAINTR_BRIDGE.auth.signOut(); $('#authDlg').close(); showToast('Signed out.'); });
+  $('#authSignOut').addEventListener('click', async () => { try{await window.FAINTR_BRIDGE.auth.signOut(); $('#authDlg').close(); showToast('Signed out.');}catch(e){$('#authStatus2').textContent=e.message;} });
+  $('#authDlg').addEventListener('close',()=>{$('#authPass').value='';$('#authPass2').value='';});
   $('#authSaveName').addEventListener('click', async () => { try { await window.FAINTR_BRIDGE.auth.setName($('#authNewName').value.trim()); $('#authStatus2').textContent = 'Saved.'; } catch (err) { $('#authStatus2').textContent = err.message; } });
   $('#authSetPass').addEventListener('click', async () => { try { await window.FAINTR_BRIDGE.auth.updatePassword($('#authPass2').value); $('#authStatus2').textContent = 'Password updated.'; $('#authNewPass').hidden = true; } catch (err) { $('#authStatus2').textContent = err.message; } });
   $('#authIn').addEventListener('click', async (e) => {
@@ -1672,7 +1742,26 @@ if (WEB) {
     try { const r = await window.FAINTR_BRIDGE.auth.moveLocalToAccount(); $('#authMove').textContent = `Added ${r.saved} team${r.saved === 1 ? '' : 's'} to your account.`; await loadRoster(); if ($('#view-saved').classList.contains('on')) loadSaved(); } catch (err) { $('#authStatus2').textContent = err.message; }
   });
   // Signing in or out swaps which Roster and teams are shown
+  let renderedAccount=window.FAINTR_BRIDGE.state.user?.id||null;
   window.FAINTR_BRIDGE.onChange(async (st, reason) => {
+    if(reason==='auth-changing'){
+      const next=st.user?.id||null;
+      if(renderedAccount&&renderedAccount!==next){
+        S.roster=[];$('#rGrid').replaceChildren();$('#savedList').replaceChildren();
+        VIPUI.seq++;VIPUI.battles=[];VIPUI.teams=[];VIPUI.alerts=[];
+        ['#battleLogStats','#battleLogEntries','#vipAlertList','#bugList'].forEach(sel=>$(sel)?.replaceChildren());
+        $('#vipUpgradeResults').textContent='Find your next build for the selected cup.';
+        for(const id of ['rDlg','qDlg'])if($('#'+id).open)$('#'+id).close();
+        QA=[];$('#qText').value='';$('#qPreview').replaceChildren();$('#rfNick').value='';$('#rfNotes').value='';
+        RF.p=null;RF.uid=null;RF.expected=undefined;
+        ['#authEmail','#authNewName','#authPass','#authPass2','#bugEmail','#bugTitle','#bugDetails','#bugSteps'].forEach(sel=>{if($(sel))$(sel).value='';});
+        $('#authWho').textContent='';if($('#authDlg').open)openAuth();
+        lastReport=null;$('#saveBtn').disabled=true;$('#gradeResult').innerHTML=GRADER_EMPTY;$('#battleResult').replaceChildren();$('#cfResult').replaceChildren();
+        if(S.fmt){buildSlots();buildBattle();ownedNote();}
+        showToast('Account changed. Unsaved forms and results were cleared from this view; saved data stays with its original account.');
+      }
+      renderedAccount=next;syncAccount();return;
+    }
     if (reason === 'password-recovery') { syncAccount(); openAuth(); $('#authNewPass').hidden = false; return; }
     if (reason === 'membership') {
       syncPremium();
@@ -1706,11 +1795,13 @@ function showLoader(title, loaded, total) {
 
 /* ======================= tabs + boot ======================= */
 function showView(name) {
+  window.FAINTR_ANALYTICS?.page(name);
   if (['roster', 'saved'].includes(name) && needPremium()) return;
   const cur = $$('nav.tabs button[aria-selected="true"]')[0];
   if (cur && cur.dataset.view !== 'bugs') S.lastView = cur.textContent;
   if (name === 'bugs') loadBugs();
   $$('nav.tabs button').forEach((x) => x.setAttribute('aria-selected', x.dataset.view === name));
+  $$('nav.tabs button').forEach(x=>{x.tabIndex=x.dataset.view===name?0:-1;});
   $$('.view').forEach((v) => v.classList.toggle('on', v.id === 'view-' + name));
   const tools = $('.fmttools'), view = $('#view-' + name);
   let head = view.querySelector('.viewhead');
@@ -1720,15 +1811,25 @@ function showView(name) {
   }
   tools.parentElement.classList.remove('has-tools');
   head.classList.add('has-tools'); head.append(tools);
-  if (name === 'meta' && !META) loadMeta();
-  if (name === 'saved') loadSaved();
+  if (name === 'meta' && !META) loadMeta().catch(e=>{showToast(e.message);$('#metaChanges').textContent='Could not load the meta. Open this tab again to retry.';});
+  if (name === 'saved') loadSaved().catch(e=>{$('#savedList').innerHTML=`<p class="empty" role="alert">${esc(e.message)} Open My Teams again to retry.</p>`;});
   if (name === 'news') loadNews();
-  if (name === 'roster') renderRoster();
+  if (name === 'roster') {renderRoster();if(S.booted)loadRoster().catch(e=>{$('#rStorageNote').textContent=`Could not refresh your Roster: ${e.message} Your last loaded list is still shown.`;});}
   if (name === 'vip') { syncPremium(); loadVip(); }
   if (name === 'ivs') { renderIvLeague(); if (!IVS.p) { const id = store.get('faintr.ivspecies'); if (id) fullCatalog().then((f) => { const p = f.find((c) => c.id === id); if (p && !IVS.p) setIvSpecies(p); }); } }
   window.scrollTo({ top: 0 });
 }
-$$('nav.tabs button').forEach((b) => b.addEventListener('click', () => showView(b.dataset.view)));
+$$('nav.tabs button').forEach((b) => {
+  const view=$('#view-'+b.dataset.view);b.id||='tab-'+b.dataset.view;b.setAttribute('aria-controls',view.id);b.tabIndex=b.getAttribute('aria-selected')==='true'?0:-1;
+  view.setAttribute('role','tabpanel');view.setAttribute('aria-labelledby',b.id);
+  b.addEventListener('click', () => showView(b.dataset.view));
+});
+$('nav.tabs').addEventListener('keydown',e=>{
+ if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
+ const tabs=$$('nav.tabs button').filter(b=>!b.hidden&&b.offsetParent!==null),index=tabs.indexOf(document.activeElement);if(index<0)return;
+ const next=e.key==='Home'?0:e.key==='End'?tabs.length-1:(index+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+ e.preventDefault();tabs[next].click();tabs[next].focus();
+});
 async function loadInfo() {
   S.info = await api('/api/info', undefined, { noF: true });
   $('#datainfo').innerHTML = `<span class="dot"></span>Data from ${fmtVersion(S.info.pvpoke)}`;
@@ -1768,7 +1869,7 @@ async function loadInfo() {
   renderIvLeague();
   S.anti = hasPremium() && store.get('faintr.anti') === '1';
   fullCatalog().catch(() => {});
-  await loadRoster();
+  await loadRoster().catch(e=>{S.roster=[];ownedNote();showToast(`Could not load your Roster: ${e.message} You can still use the public team tools.`);});
   await setFormat(S.f, true);
   S.booted = true;
   if (WEB) { $('#shareGradeBtn').hidden=false; await restoreSharedTeam(); }

@@ -130,6 +130,7 @@ jobs:
           node tools/test-sharing.cjs
           node --test tools/operations-alerts.test.cjs
           node --test tools/grading-roster.test.cjs
+          node --test tools/audit-regressions.test.cjs tools/battle-mechanics.test.cjs tools/analytics.test.cjs
           node tools/reproduce-grading.cjs
 
       - name: Install release-check browsers

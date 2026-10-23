@@ -113,7 +113,7 @@ function buildReport({ ctx, F, C, matrix, rows, stats, ivs, ivRows, leads, overa
     const others = [0, 1, 2].filter((x) => x !== slot);
     const cands = [];
     for (let c = 3; c < allStats.length; c++) {
-      if (others.some((o) => allStats[o].base === allStats[c].base) || allStats[slot].base === allStats[c].base) continue;
+      if (others.some((o) => allStats[o].base === allStats[c].base) || allStats[slot].base === allStats[c].base || (allStats[c].mega&&others.some(o=>allStats[o].mega))) continue;
       const m = [0, 1, 2].map((x) => (x === slot ? c : x));
       const r = sc.scoreTeam(m, 0);
       cands.push({ c, score: M.composite(r.metrics, w, C), m: r.metrics });

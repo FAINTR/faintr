@@ -14,6 +14,8 @@ const { Scorer, PERMS } = require('./scoring');
 const { buildReport, gradesFor } = require('./report');
 const { upgradeCandidates } = require('./viptools');
 const rosterLeagues = require('./ui/roster-leagues');
+const storagePatches = require('./ui/storage-patches');
+const {teamError}=require('./team-rules');
 
 const DEFAULT_F = 'all-1500';
 const IV_FLOORS = [0, 1, 2, 3, 4, 5, 10, 12];
@@ -106,6 +108,7 @@ function createCore(env) {
 
   async function report(st, members, weights) {
     const ms = members.map((m) => resolveMember(st, m));
+    const invalid=teamError(ms.map(m=>st.catalogById.get(m.id)));if(invalid)throw err(invalid,422);
     const custom = ms.map((m) => !!m.ivs);
     const ivP = ms.map((m) => env.pool.run('ivInfo', m.id, m.ivs, m.levelCap, st.F));
     const mineP = ms.map((m) => getMember(st, m));
@@ -131,6 +134,7 @@ function createCore(env) {
   }
   async function quickGrade(st, members) {
     const ms = members.map((m) => resolveMember(st, m));
+    const invalid=teamError(ms.map(m=>st.catalogById.get(m.id)));if(invalid)throw err(invalid,422);
     const mine = await Promise.all(ms.map((m) => getMember(st, m)));
     const sc = new Scorer({ ev }, st.matrix.threats, st.matrix.meta, mine.map((x) => x.row), mine.map((x) => x.stat), st.F);
     const r = sc.scoreTeam([0, 1, 2], 0);
@@ -150,12 +154,12 @@ function createCore(env) {
         const st = await fstate(t.f || DEFAULT_F);
         if (!st.D) continue;
         if (t.history && t.history.length && t.history[0].version === st.D.info.pvpoke) continue;
+        const basis=storagePatches.basis(t,'saved');
         const g = await quickGrade(st, t.members);
-        t.history = [historyEntry(st, g)].concat(t.history || []).slice(0, 30);
-        changed.push(t);
+        changed.push({id:t.id,basis,history:[historyEntry(st,g)].concat(t.history||[]).slice(0,30)});
       } catch (e) { if (env.log) env.log(`regrade failed for ${t.name}: ${e.message}`); }
     }
-    if (changed.length) await savedPutMany(changed);
+    if (changed.length) await env.storage.savedRefreshMany(changed);
     return changed.length;
   }
 
@@ -269,11 +273,13 @@ function createCore(env) {
   // ---------- Roster
   // Entries plus which standard leagues each is eligible for, and its move names
   async function rosterSummary(entries) {
+    if (!entries.length) return [];
     const elig = {};
-    for (const [cp, key] of Object.entries(LEAGUE_KEYS)) { try { elig[cp] = (await fstate(key)).catalogById; } catch (e) { elig[cp] = null; } }
+    // Eligibility needs the catalog, not hundreds of thousands of ranked teams.
+    for (const [cp, key] of Object.entries(LEAGUE_KEYS)) { try { elig[cp] = new Set(ev(`pokemonCatalog(${Fjs(formatDef(key))})`).map(p=>p.id)); } catch (e) { elig[cp] = null; } }
     const byId = new Map(fullCatalog().map((c) => [c.id, c]));
     return entries.map((e) => ({ ...e, image: undefined,
-      moveNames: (() => { const c = byId.get(e.id); if (!c) return []; const mv = new Map([...c.fast, ...c.charged]); return (e.moveset || []).map((m) => mv.get(m) || m); })(),
+      moveNames: (() => { const c = byId.get(e.id); if (!c) return []; const mv = new Map([...c.fast, ...c.charged,...(c.extra||[])]); return (e.moveset || []).map((m) => mv.get(m) || m); })(),
       eval: e.eval && { ...e.eval, leagues: e.eval.leagues.map((l) => ({ ...l, eligible: elig[l.cp] ? elig[l.cp].has(e.id) : true })) } }));
   }
   // Validates a Roster entry and evaluates it; the caller stores it
@@ -281,9 +287,12 @@ function createCore(env) {
     const sp = fullCatalog().find((c) => c.id === body.id);
     if (!sp) throw err('Pick a Pokémon from the list.', 400);
     const ivs = normIVs(body.ivs || { atk: 0, def: 0, hp: 0 });
-    const cp = body.cp ? Math.max(10, Math.min(9999, parseInt(body.cp, 10))) : null;
+    const cp = body.cp ? Number(body.cp) : null;
+    if(cp!==null&&(!Number.isInteger(cp)||cp<10||cp>9999))throw err('Current CP must be a whole number from 10 to 9,999.',400);
     const levelCap = +body.levelCap === 51 ? 51 : 50;
-    const moveset = (Array.isArray(body.moveset) ? body.moveset : []).filter((m) => typeof m === 'string').slice(0, 4);
+    if(body.moveset!=null&&(!Array.isArray(body.moveset)||body.moveset.length>4||body.moveset.some(m=>typeof m!=='string')))throw err('Moves must be a list of up to four move IDs.',400);
+    const moveset = body.moveset||[];
+    if(moveset.length&&(moveset.length<2||!sp.fast.some(([id])=>id===moveset[0])||moveset.slice(1).some((move,i)=>!(i===2?sp.extra||[]:sp.charged).some(([id])=>id===move))))throw err('Those moves do not match this Pokémon. Choose its moves again, or leave them on PvPoke’s pick.',400);
     const ball = ['poke', 'great', 'ultra', 'master', 'premier', 'other'].includes(body.ball) ? body.ball : 'poke';
     const evalRes = await env.pool.run('rosterEval', sp.id, ivs, cp, levelCap);
     return {
@@ -298,9 +307,10 @@ function createCore(env) {
   async function saveRosterEntry(body) {
     const all = await env.storage.rosterAll();
     const old = body.uid ? all.find((x) => x.uid === body.uid) : null;
+    storagePatches.assertCurrent(old,body.expected);
     if (!old && all.length >= ROSTER_MAX) throw err(`Your Roster holds up to ${ROSTER_MAX} Pokémon. Remove some to add more.`, 400);
     const entry = await makeRosterEntry(body, old);
-    await env.storage.rosterUpsert(entry);
+    await env.storage.rosterUpsert(entry,body.expected===undefined&&old?storagePatches.contentBasis(old):body.expected);
     return entry;
   }
   // Entries saved by an older version get the newer evaluation (evolutions, XL)
@@ -308,9 +318,10 @@ function createCore(env) {
     const list = await env.storage.rosterAll(), changed = [];
     for (const e of list) {
       if (e.eval && e.eval.v >= 2) continue;
-      try { changed.push({ ...e, eval: await env.pool.run('rosterEval', e.id, e.ivs, e.cp, e.levelCap) }); } catch (err2) { /* keep the old one */ }
+      const basis=storagePatches.basis(e,'roster');
+      try { changed.push({uid:e.uid,basis,eval:await env.pool.run('rosterEval',e.id,e.ivs,e.cp,e.levelCap)}); } catch (err2) { /* keep the old one */ }
     }
-    if (changed.length) await rosterPutMany(changed);
+    if (changed.length) await env.storage.rosterRefreshMany(changed);
     return changed.length;
   }
   // Quick add from pasted lines like "Azumarill 0/15/15 1498"
@@ -370,11 +381,13 @@ function createCore(env) {
       const cands = full.filter((c) => c.shadow === shadow && norm(c.name.replace(/\(.*\)/, '')) === name);
       let hit = null;
       if (form) hit = cands.find((c) => norm(c.name).includes(form));
+      if(form&&!hit){bad.push(`${get('name')}: form "${get('form')}" was not recognized`);continue;}
       if (!hit) hit = cands.find((c) => !/\(/.test(c.name.replace(/\(shadow\)/i, ''))) || cands[0];
       const ivs = { atk: parseInt(get('atk'), 10), def: parseInt(get('def'), 10), hp: parseInt(get('hp'), 10) };
       if (!hit || [ivs.atk, ivs.def, ivs.hp].some((v) => !(v >= 0 && v <= 15))) { bad.push(get('name') || '(blank)'); continue; }
       const mv = (list, label) => { const n = norm(label); if (!n) return null; const f = list.find(([, nm]) => norm(nm) === n); return f ? f[0] : null; };
       const fast = mv(hit.fast, get('fast')), c1 = mv(hit.charged, get('c1')), c2 = mv(hit.charged, get('c2'));
+      if((get('fast')&&!fast)||(get('c1')&&!c1)||(get('c2')&&!c2)||((fast||c1||c2)&&(!fast||!c1))){bad.push(`${get('name')}: moves could not be read; check the fast and charged move columns`);continue;}
       out.push({ id: hit.id, name: hit.name, nickname: get('nick').slice(0, 24), ivs, cp: parseInt(get('cp'), 10) || null,
         shiny: /^(1|yes|true|shiny)$/i.test(get('shiny')), moveset: fast && c1 ? [fast, c1].concat(c2 ? [c2] : []) : [] });
     }
@@ -428,9 +441,9 @@ function createCore(env) {
         return { format: st.F.title, baseline, readyCount: ready.length, suggestions: suggestions.slice(0, 10) };
       }
       if (p === '/api/info') {
-        const gl = await fstate(DEFAULT_F);
+        const gl = env.info.web ? null : await fstate(DEFAULT_F);
         return { live: env.live(), app: env.info.app, version: env.info.version, source: env.info.source, web: !!env.info.web,
-          pvpoke: gl.D ? gl.D.info.pvpoke : env.info.installed, dataBuilt: env.info.dataBuilt || null,
+          pvpoke: gl && gl.D ? gl.D.info.pvpoke : env.info.installed, dataBuilt: env.info.dataBuilt || null,
           grades: Object.fromEntries(Object.entries(M.GRADES).map(([k, g]) => [k, { label: g.label, desc: g.desc, pvpoke: !!g.pvpoke }])),
           weights: M.DEFAULT_WEIGHTS, tiers: M.TIERS, formats: formatsView() };
       }
@@ -522,15 +535,28 @@ function createCore(env) {
       if (p === '/api/roster/csv') return rosterFromCSV(body.text);
       if (p === '/api/roster/parse') return parseRosterLines(body.text);
       if (p === '/api/roster/import') {
-        const list = Array.isArray(body.roster) ? body.roster : [];
-        const errors = [], entries = [];
-        const room = Math.max(0, ROSTER_MAX - (await env.storage.rosterAll()).length);
-        for (const e of list.slice(0, Math.min(1000, room))) {
-          try { entries.push(await makeRosterEntry({ ...e, uid: undefined }, null)); } catch (e2) { errors.push(`${e.name || e.id}: ${e2.message}`); }
+        if(!Array.isArray(body.roster))throw err('That file must contain a Roster array. Nothing was imported.',400);
+        const list = body.roster;
+        const errors = [], entries = [], rejected=[];
+        const existing=await env.storage.rosterAll(),known=new Set(existing.map(e=>e.uid));
+        const room = Math.max(0, ROSTER_MAX - existing.length);
+        let confirmed=0;
+        const count=Math.min(1000,list.length);
+        for (const [index,e] of list.slice(0,count).entries()) {
+          try {
+            // A retry after an uncertain network response must not add another copy.
+            // Keys belong to one import preview; normal exported Pokémon get new keys.
+            const key=/^[a-z0-9-]{16,80}$/i.test(e?._importKey||'')?'import-'+e._importKey:null;
+            if(key&&known.has(key)){confirmed++;continue;}
+            if(entries.length>=room)throw Error('Your Roster is full. This entry is still pending.');
+            const entry=await makeRosterEntry({ ...e, uid: undefined }, null);
+            if(key){entry.uid=key;known.add(key);}
+            entries.push(entry);
+          } catch (e2) { errors.push(`${e?.name || e?.id || 'Entry'}: ${e2.message}`);rejected.push(index); }
         }
-        if (list.length > room) errors.push(`Your Roster holds up to ${ROSTER_MAX} Pokémon, so ${list.length - room} weren't added.`);
-        if (entries.length) await rosterPutMany(entries);
-        return { added: entries.length, errors: errors.slice(0, 10) };
+        if(list.length>count){for(let index=count;index<list.length;index++)rejected.push(index);errors.push('Only 1,000 entries can be imported in one batch. The remaining entries are still pending.');}
+        if (entries.length) await (env.storage.rosterInsertMany?env.storage.rosterInsertMany(entries):rosterPutMany(entries));
+        return { added: entries.length+confirmed, errors: errors.slice(0, 10), rejected };
       }
       if (p === '/api/ivtable') {
         const cp = [500, 1500, 2500, 10000].includes(+body.cp) ? +body.cp : 1500;

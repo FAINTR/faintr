@@ -20,58 +20,20 @@ function toMain(op, args) {
 }
 const storage = {
   rosterAll: () => toMain('rosterAll', []),
-  rosterUpsert: (e) => toMain('rosterUpsert', [e]),
+  rosterUpsert: (e,expected) => toMain('rosterUpsert', [e,expected]),
   rosterRemove: (uid) => toMain('rosterRemove', [uid]),
   savedAll: () => toMain('savedAll', []),
   savedUpsert: (t) => toMain('savedUpsert', [t]),
   savedRemove: (id) => toMain('savedRemove', [id]),
   rosterUpsertMany: (list) => toMain('rosterUpsertMany', [list]),
+  rosterInsertMany: (list) => toMain('rosterInsertMany', [list]),
   savedUpsertMany: (list) => toMain('savedUpsertMany', [list]),
+  rosterRefreshMany: (list) => toMain('rosterRefreshMany', [list]),
+  savedRefreshMany: (list) => toMain('savedRefreshMany', [list]),
 };
 
 // ---------- engine worker pool (falls back to running jobs here if nested workers aren't available)
-const PRIORITY = new Set(['ivInfo', 'battleDetail', 'memberStatic', 'memberVs', 'rosterEval', 'ivTable', 'familyRanks']);
-class Pool {
-  constructor(n) {
-    this.queue = []; this.idle = []; this.jobs = new Map(); this.seq = 0; this.inline = false;
-    try {
-      if (typeof Worker === 'undefined') throw new Error('no nested workers');
-      for (let i = 0; i < n; i++) {
-        const w = new Worker('/' + MANIFEST.files['engine-worker.js']);
-        w.onmessage = (e) => this.onMessage(w, e.data);
-        w.onerror = () => {};
-        w.postMessage({ type: 'init', manifest: MANIFEST });
-        w.ready = false;
-      }
-    } catch (e) { this.inline = true; }
-  }
-  onMessage(w, m) {
-    if (m.type === 'ready') { w.ready = true; this.idle.push(w); return this.pump(); }
-    if (m.type === 'fatal') { this.inline = true; return this.pump(); }
-    const job = this.jobs.get(m.id); this.jobs.delete(m.id);
-    this.idle.push(w); this.pump();
-    if (!job) return;
-    if (m.error) job.reject(new Error(m.error)); else job.resolve(m.result);
-  }
-  run(fn, ...args) {
-    return new Promise((resolve, reject) => {
-      const job = { id: ++this.seq, fn, args, resolve, reject };
-      if (PRIORITY.has(fn)) { const i = this.queue.findIndex((j) => !PRIORITY.has(j.fn)); this.queue.splice(i < 0 ? this.queue.length : i, 0, job); } else this.queue.push(job);
-      this.pump();
-    });
-  }
-  pump() {
-    if (this.inline) {
-      while (this.queue.length) { const j = this.queue.shift(); try { j.resolve(self[j.fn](...j.args)); } catch (e) { j.reject(e); } }
-      return;
-    }
-    while (this.idle.length && this.queue.length) {
-      const w = this.idle.shift(), j = this.queue.shift();
-      this.jobs.set(j.id, j);
-      w.postMessage({ id: j.id, fn: j.fn, args: j.args });
-    }
-  }
-}
+const { Pool } = require('./engine-pool');
 
 // ---------- data files
 function progress(label, loaded, total) { self.postMessage({ type: 'progress', label, loaded, total }); }
@@ -128,7 +90,7 @@ function init(manifest) {
   MANIFEST = manifest;
   host.boot(manifest);
   const n = Math.max(1, Math.min(4, ((self.navigator && navigator.hardwareConcurrency) || 2) - 1));
-  const pool = new Pool(n);
+  const pool = new Pool(n, { lazy:true,WorkerClass: typeof Worker === 'undefined' ? null : Worker, url: '/' + MANIFEST.files['engine-worker.js'], manifest, runInline: (fn,...args)=>self[fn](...args) });
   const formats = manifest.formats.map((f) => ({ ...f }));
   core = createCore({
     ev: (code) => (0, eval)(code),

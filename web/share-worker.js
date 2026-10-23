@@ -2,6 +2,7 @@
 import codec from './share-codec.js';
 import { renderCard } from './share-image.js';
 import metadata from './share-metadata.json';
+import {analyticsEndpoint} from './analytics-endpoint.js';
 const escape = s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const headers={'X-Content-Type-Options':'nosniff','Referrer-Policy':'strict-origin-when-cross-origin','X-Frame-Options':'DENY'};
 const problem=(status,message)=>Object.assign(new Error(message),{status});
@@ -38,6 +39,7 @@ function describe(team) {
 export default {
   async fetch(request,env,ctx) {
     const url=new URL(request.url);
+    if(url.pathname==='/a/event')return analyticsEndpoint(request,env,metadata);
     if (!url.pathname.startsWith('/share/') && !url.pathname.startsWith('/s/')) return env.ASSETS.fetch(request);
     if(request.method==='POST' && url.pathname==='/share/create'){
       try {

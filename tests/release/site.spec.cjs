@@ -112,12 +112,47 @@ test('legacy shared team restores all moves and IVs in the grader',async({page})
   await expect(page.locator('#slots')).toContainText('Mandibuzz');
   await fits(page);
 });
-test('roster editing persists locally and the dialog fits',async({page})=>{
+
+test('populated grading breakdowns fit at every report tab',async({page},info)=>{
+  await page.goto('/share/'+codec.encode(setup));
+  await expect(page.locator('#sharedTeamNote')).toBeVisible();
+  await page.locator('#gradeBtn').click();
+  await expect(page.locator('#gradeResult article')).toBeVisible();
+  if(['desktop','small-phone'].includes(info.project.name))await page.screenshot({path:require('node:path').resolve(`../output/audit-report-${info.project.name}.png`),fullPage:true});
+  for(const name of ['Overview','Game plan','Vs meta teams','Matchups','Threats','Members','IV effects','Improve']) {
+    await page.locator('#gradeResult').getByRole('tab',{name,exact:true}).click();await fits(page);
+  }
+});
+
+test('populated battle, timeline and detailed tables fit on phones',async({page})=>{
+  await loaded(page);
+  await page.locator('#cupSel').selectOption('all-1500');
+  await expect(page.locator('#matched')).toContainText('Great League');
+  await page.getByRole('tablist',{name:'Sections'}).getByRole('tab',{name:'Matchups',exact:true}).click();
+  for(const [i,name] of ['Azumarill','Clodsire'].entries()) {
+    const editor=page.locator('#bsides .ed').nth(i);
+    await editor.locator('.picker input').fill(name);
+    await editor.locator('.suggest button').first().click();
+  }
+  await page.locator('#battleBtn').click();
+  await expect(page.locator('#battleResult article')).toBeVisible();await fits(page);
+  await page.locator('#battleResult summary').click();await fits(page);
+  await expect(page.locator('#battleResult svg')).toBeVisible();
+});
+
+test('supporters, policies, licenses and sources fit and have working home links',async({page})=>{
+  for(const path of ['supporters','privacy','terms','licenses','sources']) {
+    const response=await page.goto('/'+path+'/');expect(response.status()).toBe(200);
+    await expect(page.locator('h1')).toBeVisible();await fits(page);
+    await expect(page.locator('a[href="/"],a[href="https://faintr.com/"]').first()).toBeVisible();
+  }
+});
+test('roster editing persists locally and the dialog fits',async({page},info)=>{
   await loaded(page);
   await page.getByRole('tab',{name:'Roster',exact:true}).click();
   await page.locator('#rAdd').click();
   await page.locator('#pk-roster input').fill('Azumarill');
-  await page.locator('#pk-roster .suggest button').first().click();
+  if(info.project.use.hasTouch)await page.locator('#pk-roster .suggest button').first().tap();else await page.locator('#pk-roster .suggest button').first().click();
   await page.locator('#rfNick').fill('Release test Azumarill');
   await fits(page);
   await page.locator('#rfSave').click();
@@ -128,6 +163,14 @@ test('roster editing persists locally and the dialog fits',async({page})=>{
   await expect(page.locator('#teams .team').first()).toBeVisible();
   await page.getByRole('tab',{name:'Roster',exact:true}).click();
   await expect(page.locator('#rGrid')).toContainText('Release test Azumarill');
+});
+test('tool tabs and Pokémon suggestions support keyboard selection',async({page})=>{
+ await loaded(page);const species=(await page.locator('#teams .name').first().innerText()).trim();const teams=page.getByRole('tab',{name:'Teams',exact:true});await teams.focus();await teams.press('ArrowRight');
+ const grade=page.getByRole('tab',{name:'Team Grader',exact:true});await expect(grade).toBeFocused();await expect(grade).toHaveAttribute('aria-selected','true');
+ const input=page.locator('#slots .picker input').first();await input.fill(species);await expect(input).toHaveAttribute('aria-expanded','true');
+ await input.press('ArrowDown');await expect(input).toHaveAttribute('aria-activedescendant',/picker-\d+-list-0/);await input.press('Enter');
+ await expect(page.locator('#slots .picked').first()).toContainText(species);await expect(input).toHaveAttribute('aria-expanded','false');await fits(page);
+ await grade.focus();await grade.press('Home');await expect(teams).toBeFocused();
 });
 test('saved teams with grades and long names fit on phones',async({page})=>{
   const format=manifest.formats.find(f=>f.key===setup.f);
@@ -141,6 +184,44 @@ test('saved teams with grades and long names fit on phones',async({page})=>{
   await fits(page);
   await expect(page.locator('#savedList .tile')).toHaveCount(10);
 });
+
+test('roster partial imports retain failures and export, deletion and undo preserve entries',async({page})=>{
+ await loaded(page);await page.getByRole('tab',{name:'Roster',exact:true}).click();
+ const roster=[{id:'azumarill',nickname:'Import fixture',ivs:{atk:0,def:15,hp:15},cp:1498,leagues:[1500]},
+  {id:'not_a_species',ivs:{atk:0,def:15,hp:15},cp:1400}];
+ await page.locator('#rImportFile').setInputFiles({name:'roster-test.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({roster}))});
+ await expect(page.locator('#qPreview')).toContainText('does not replace');await page.locator('#qAdd').click();
+ await expect(page.locator('#qPreview')).toContainText('1 entries remain pending');
+ await expect(page.locator('#rGrid [data-uid]')).toHaveCount(1);await fits(page);
+ await page.locator('#qAdd').click();await expect(page.locator('#qPreview')).toContainText('1 entries remain pending');
+ await expect(page.locator('#rGrid [data-uid]')).toHaveCount(1);
+ const pendingDownload=page.waitForEvent('download');await page.locator('#qDownloadPending').click();const pending=await pendingDownload;
+ const pendingText=require('node:fs').readFileSync(await pending.path(),'utf8');expect(JSON.parse(pendingText).roster[0].id).toBe('not_a_species');
+ await page.locator('#qClose').click();
+ const download=page.waitForEvent('download');await page.locator('#rExport').click();const file=await download;
+ const exported=JSON.parse(require('node:fs').readFileSync(await file.path(),'utf8'));expect(exported.roster).toHaveLength(1);expect(exported.roster[0].leagues).toEqual([1500]);
+ await page.locator('#rGrid [data-act="del"]').click();await page.locator('#rGrid [data-act="yesdel"]').click();
+ await expect(page.locator('#rGrid [data-uid]')).toHaveCount(0);await page.getByRole('button',{name:'Undo',exact:true}).click();
+ await expect(page.locator('#rGrid [data-uid]')).toHaveCount(1);await page.reload();await expect(page.locator('#teams .team').first()).toBeVisible();
+ await page.getByRole('tab',{name:'Roster',exact:true}).click();await expect(page.locator('#rGrid')).toContainText('Import fixture');
+});
+
+test('optional analytics waits for consent, records one tool action and stops after withdrawal',async({page})=>{
+ const events=[];
+ await page.route('**/config.js*',route=>route.fulfill({contentType:'text/javascript',body:'window.FAINTR_CONFIG={analyticsEnabled:true};'}));
+ await page.route('**/a/event',async route=>{events.push(route.request().postDataJSON());await route.fulfill({status:204});});
+ await loaded(page);expect(events).toHaveLength(0);
+ await page.getByRole('button',{name:'Analytics choices',exact:true}).click();await fits(page);
+ await page.getByRole('button',{name:'Allow usage analytics',exact:true}).click();await expect.poll(()=>events.length).toBe(1);
+ await page.getByRole('tab',{name:'Team Grader',exact:true}).click();await expect.poll(()=>events.filter(e=>e.event==='page_view'&&e.tool==='grade').length).toBe(1);
+ await page.goto('/share/'+codec.encode(setup));await expect(page.locator('#sharedTeamNote')).toBeVisible();await page.locator('#gradeBtn').click();
+ await expect(page.locator('#gradeResult article')).toBeVisible();await expect.poll(()=>events.filter(e=>e.event==='grade_completed').length).toBe(1);
+ expect(events.filter(e=>e.event==='grade_started')).toHaveLength(1);
+ await page.getByRole('button',{name:'Analytics choices',exact:true}).click();await page.getByRole('button',{name:'Keep analytics off',exact:true}).click();
+ const count=events.length;await page.getByRole('tab',{name:'PvP IVs',exact:true}).click();expect(events).toHaveLength(count);
+ const keys=await page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('faintr.analytics.')));expect(keys).toEqual(['faintr.analytics.consent']);
+ for(const event of events)expect(Object.keys(event).sort()).toEqual(['id','event','tool','source','visitor','session','returning','consent'].sort());
+});
 test('guest account and battle tools dialogs fit without accessing a real account',async({page})=>{
   await page.route('**/config.js*',route=>route.fulfill({contentType:'text/javascript',body:'window.FAINTR_CONFIG={supabaseUrl:"https://release.invalid",supabaseAnonKey:"synthetic-test-key",loginProviders:"discord,google"};'}));
   await loaded(page);
@@ -148,6 +229,70 @@ test('guest account and battle tools dialogs fit without accessing a real accoun
   await page.locator('#accountBtn').click(); await expect(page.locator('#authDlg')).toBeVisible(); await fits(page);
   await expect(page.locator('#authDiscord')).toBeVisible(); await expect(page.locator('#authGoogle')).toBeVisible();
   await page.locator('#authClose').click(); await expect(page.locator('#authDlg')).toBeHidden();
+});
+test('account switch clears private views even when the next account cannot load',async({page})=>{
+ await page.route('**/config.js*',route=>route.fulfill({contentType:'text/javascript',body:'window.FAINTR_CONFIG={supabaseUrl:"https://release.invalid",supabaseAnonKey:"synthetic-test-key"};'}));
+ await page.route('**/vendor/supabase.js*',route=>route.fulfill({contentType:'text/javascript',body:`
+ window.__testUser={id:'synthetic-a',email:'a@example.invalid'};
+ window.__testDoc={version:1,roster:[{uid:'private-fixture',id:'azumarill',name:'Azumarill',nickname:'Private account A fixture',types:['water','fairy'],dex:184,ivs:{atk:0,def:15,hp:15},cp:1498,levelCap:50,moveset:[],leagues:[1500],eval:{v:2,leagues:[]}}],teams:[],battles:[],vip_settings:{}};
+ window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:{user:window.__testUser}}}),onAuthStateChange:fn=>{window.__testAuth=fn;}},from:table=>{
+ let fields;const q={select:f=>{fields=f;return q;},eq:()=>q,maybeSingle:async()=>table==='profiles'?{data:{display_name:'Synthetic trainer',is_admin:false}}:window.__testUser.id==='synthetic-b'?{error:{message:'Synthetic offline failure'}}:{data:{version:1}},single:async()=>({data:window.__testDoc})};return q;}})};
+ `}));
+ await loaded(page);await page.getByRole('tab',{name:'Roster',exact:true}).click();await expect(page.locator('#rGrid')).toContainText('Private account A fixture');
+ await page.evaluate(()=>{window.__testUser={id:'synthetic-b',email:'b@example.invalid'};window.__testAuth('SIGNED_IN',{user:window.__testUser});});
+ await expect(page.locator('#rGrid')).not.toContainText('Private account A fixture');
+ await expect.poll(()=>page.evaluate(()=>localStorage.getItem('faintr.cloud.synthetic-a'))).toBeNull();
+ expect(await page.evaluate(()=>window.__testDoc.roster.length)).toBe(1);await fits(page);
+});
+
+test('typed account details stay readable in system, light and dark themes',async({page,browserName})=>{
+  await page.route('**/config.js*',route=>route.fulfill({contentType:'text/javascript',body:'window.FAINTR_CONFIG={supabaseUrl:"https://release.invalid",supabaseAnonKey:"synthetic-test-key"};'}));
+  await page.emulateMedia({colorScheme:'dark'});
+  await loaded(page);
+  const autofill=browserName==='chromium'?await page.context().newCDPSession(page):null;
+  if(autofill){await autofill.send('DOM.enable');await autofill.send('CSS.enable');}
+  for(const theme of ['system-dark','light','dark']) {
+    if(theme!=='system-dark')await page.locator('#themeBtn').click();
+    await page.locator('#accountBtn').click();
+    for(const mode of ['in','up']) {
+      await page.locator(`#authMode [data-m="${mode}"]`).click();
+      await page.locator('#authEmail').fill('visibility-test@example.invalid');
+      await page.locator('#authPass').fill('SyntheticTestOnly123!');
+      if(mode==='up')await page.locator('#authName').fill('Visibility test');
+      const colors=await page.locator('#authForm input:visible').evaluateAll(fields=>fields.map(field=>{
+        const style=getComputedStyle(field);
+        const rgb=value=>(value.match(/[\d.]+/g)||[]).slice(0,3).map(Number);
+        const luminance=color=>rgb(color).map(c=>{c/=255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4;}).reduce((s,c,i)=>s+c*[.2126,.7152,.0722][i],0);
+        const foreground=luminance(style.webkitTextFillColor||style.color),background=luminance(style.backgroundColor);
+        return {id:field.id,contrast:(Math.max(foreground,background)+.05)/(Math.min(foreground,background)+.05),background:style.backgroundColor};
+      }));
+      for(const field of colors) {
+        expect(field.contrast,`${theme}: ${field.id} text must be readable on its input background`).toBeGreaterThanOrEqual(4.5);
+        expect(field.background,`${theme}: ${field.id} must have its own background`).not.toBe('rgba(0, 0, 0, 0)');
+      }
+      // Exercise the browser's real autofill pseudo-state, including while focused.
+      if(autofill) {
+        const {root}=await autofill.send('DOM.getDocument');
+        for(const id of ['authEmail','authPass']) {
+          const {nodeId}=await autofill.send('DOM.querySelector',{nodeId:root.nodeId,selector:'#'+id});
+          await autofill.send('CSS.forcePseudoState',{nodeId,forcedPseudoClasses:['autofill','focus']});
+          const fill=await page.locator('#'+id).evaluate(field=>{
+            const style=getComputedStyle(field);
+            return {active:field.matches(':-webkit-autofill'),ink:style.webkitTextFillColor,
+              expectedInk:getComputedStyle(document.querySelector('#authDlg')).color,
+              shadow:style.boxShadow,expectedBackground:getComputedStyle(document.querySelector('#authName')).backgroundColor};
+          });
+          expect(fill.active).toBe(true);
+          expect(fill.ink).toBe(fill.expectedInk);
+          expect(fill.shadow).toContain(fill.expectedBackground);
+          await autofill.send('CSS.forcePseudoState',{nodeId,forcedPseudoClasses:[]});
+        }
+      }
+      await fits(page);
+    }
+    await page.locator('#authClose').click();
+  }
+  if(autofill)await autofill.detach();
 });
 test('roster CP and league choices govern every team picker',async({page})=>{
   await page.addInitScript(()=>localStorage.setItem('faintr.web.roster',JSON.stringify([

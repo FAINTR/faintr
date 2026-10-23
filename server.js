@@ -51,13 +51,16 @@ function readFormatData(dir) {
 // Saved data on this computer, in the async shape appcore expects
 const storage = {
   rosterAll: async () => store.roster.all(),
-  rosterUpsert: async (e) => store.roster.upsert(e),
+  rosterUpsert: async (e,expected) => {require('./ui/storage-patches').assertCurrent(store.roster.all().find(x=>x.uid===e.uid),expected);return store.roster.upsert(e);},
   rosterRemove: async (uid) => store.roster.remove(uid),
   savedAll: async () => store.saved.all(),
   savedUpsert: async (t) => store.saved.upsert(t),
   savedRemove: async (id) => store.saved.remove(id),
   rosterUpsertMany: async (list) => { for (const e of list) store.roster.upsert(e); },
+  rosterInsertMany: async list=>store.roster.write(require('./ui/storage-patches').insertRoster(store.roster.all(),list)),
   savedUpsertMany: async (list) => { for (const t of list) store.saved.upsert(t); },
+  rosterRefreshMany: async updates=>store.roster.write(require('./ui/storage-patches').refresh(store.roster.all(),updates,'roster')),
+  savedRefreshMany: async updates=>store.saved.write(require('./ui/storage-patches').refresh(store.saved.all(),updates,'saved')),
 };
 
 async function loadGlobal() {
@@ -162,8 +165,9 @@ function json(res, code, obj) {
 }
 function readBody(req) {
   return new Promise((resolve, reject) => {
-    let s = '';
-    req.on('data', (d) => { s += d; if (s.length > 3e6) reject(new Error('Request too large.')); });
+    let s = '',bytes=0,failed=false;
+    req.on('error',reject);
+    req.on('data', (d) => { if(failed)return;bytes+=Buffer.byteLength(d);if(bytes>3e6){failed=true;reject(Object.assign(new Error('Request too large.'),{code:413}));return;}s+=d; });
     req.on('end', () => { try { resolve(s ? JSON.parse(s) : {}); } catch (e) { reject(new Error('Request was not valid JSON.')); } });
   });
 }
@@ -203,6 +207,8 @@ async function hostHandle(req, res, p, url, body) {
 }
 
 async function handle(req, res) {
+  const denied=require('./http-safety').requestError(req);
+  if(denied)return json(res,denied.code,{error:denied.message});
   const url = new URL(req.url, 'http://localhost');
   const p = url.pathname;
   try {
@@ -212,7 +218,7 @@ async function handle(req, res) {
     if (out === undefined) { res.writeHead(404); return res.end('Not found'); }
     json(res, 200, out);
   } catch (e) {
-    const code = [400, 404, 409, 422].includes(e.code) ? e.code : 500;
+    const code = [400, 404, 409, 413, 422].includes(e.code) ? e.code : 500;
     if (code === 500) console.error(e);
     json(res, code, { error: e.message, needsBuild: code === 409 });
   }

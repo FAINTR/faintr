@@ -35,6 +35,9 @@ module.exports = {
       var level = cap;
       p.setLevel(level, true);
       while(p.cp > cpCap && level > 1){ level -= 0.5; p.setLevel(level, true); }
+      // PvPoke's Mega initialization can raise this again while setting the level.
+      // Rank alternatives against the same explicit ceiling used for these stats.
+      p.levelCap = cap;
       return p;
     }
     function makePokemon(id, battle, moveset, ivs, levelCap){
@@ -43,6 +46,7 @@ module.exports = {
       var p = new Pokemon(id, 0, battle);
       p.initialize(battle.getCP());
       if(ivs) applyIVs(p, ivs, levelCap);
+      else if(levelCap) applyIVs(p, {atk:p.ivs.atk,def:p.ivs.def,hp:p.ivs.hp}, levelCap);
       if(moveset){
         // Start from PvPoke's pick so a Mega keeps its extra "+" charged move, then apply the chosen moves
         p.selectRecommendedMoveset();

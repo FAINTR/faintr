@@ -7,7 +7,8 @@ module.exports = defineConfig({
   webServer: {command:'node tools/preview-site.cjs', url:'http://127.0.0.1:4176', reuseExistingServer:!process.env.CI},
   projects: [
     {name:'desktop', use:{browserName:'chromium', viewport:{width:1440,height:1000}}},
-    {name:'phone', use:{...devices['Pixel 7'], viewport:{width:390,height:844}}},
+    {name:'phone', use:{...devices['Pixel 7'], viewport:{width:375,height:812}}},
+    {name:'large-phone', use:{browserName:'chromium', viewport:{width:430,height:932}, isMobile:true, hasTouch:true}},
     {name:'small-phone', use:{browserName:'chromium', viewport:{width:320,height:740}, isMobile:true, hasTouch:true}},
     {name:'safari-phone', use:{...devices['iPhone 13']}},
   ],

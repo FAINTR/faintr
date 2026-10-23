@@ -113,9 +113,9 @@ async function pvpokeSource() {
 }
 
 // ---------- 2. team data per format
-// FAINTR code that changes the built numbers; editing any of these rebuilds every format
+// Inputs that affect built numbers: rebuild current leagues/cups; withhold other stale caches.
 const CODE = ['build.js', 'build_worker.js', 'antimeta_worker.js', 'scoring.js', 'threevthree.js', 'memberlib.js', 'pvpoke_grades.js', 'engine.js', 'engine_glue.js', 'metrics.js', 'teamcodec.js'];
-const codeHash = sha(Buffer.concat([Buffer.from(`schema${SCHEMA}`), ...CODE.map((f) => fs.readFileSync(path.join(ROOT, f)))]));
+const codeHash = sha(Buffer.concat([Buffer.from(`schema${SCHEMA}-verified-inputs-v2`), ...CODE.map((f) => fs.readFileSync(path.join(ROOT, f)))]));
 function inputFiles(F) {
   const cup = F.filesCup || F.cup;
   return ['data/gamemaster.json', ...['overall', 'leads', 'closers', 'switches'].map((c) => rankingFile(cup, c, F.cp)), `data/groups/${F.meta}.json`];
@@ -137,12 +137,13 @@ async function buildFormats(src, version, formats) {
     const prev = readJ(path.join(dir, 'inputs.json'), {});
     // Nightly refreshes focus on the live rotation. An explicit --formats request
     // can still prepare a different cup later, without rebuilding future cups now.
-    const wanted = ONLY.length ? ONLY.includes(F.key) : !FETCH || activeKeys.has(F.key);
+    const policy=rq('tools/build-policy.cjs');
+    const wanted = policy.wantedFormat(F.key,[...activeKeys],ONLY,FETCH);
     let state = 'reused';
     if (wanted && (FORCE || prev.hash !== hash || !hasData(dir))) {
       // Already-built data shipped with the app counts if it was built from these exact inputs
       const seed = path.join(SEED, F.key), seedSrc = path.join(ROOT, 'assets/pvpoke-src');
-      if (!FORCE && hasData(seed) && fs.existsSync(seedSrc) && inputHash(seedSrc, F) === hash) {
+      if (!FORCE && hasData(seed) && fs.existsSync(seedSrc) && policy.verifiedSeed(readJ(path.join(seed,'inputs.json')),hash) && inputHash(seedSrc, F) === hash) {
         fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true });
         for (const f of ['teams.json', 'teams.bin', 'matrix.json', 'antimeta.json', 'meta-changes.json']) if (fs.existsSync(path.join(seed, f))) fs.copyFileSync(path.join(seed, f), path.join(dir, f));
         state = 'seeded';
@@ -171,7 +172,7 @@ async function buildFormats(src, version, formats) {
         writeJ(path.join(dir, 'inputs.json'), { hash, version, at: new Date().toISOString() });
       }
     } else if (!hasData(dir)) state = 'none';
-    results.push({ F, dir, state, ok: hasData(dir) });
+    results.push({ F, dir, state, ok:policy.publishable({hasData:hasData(dir),hash,record:prev,state,preview:ONLY_BUILT}) });
   }
   return results;
 }
@@ -279,7 +280,7 @@ async function assemble(src, version, built, formats) {
   fs.rmSync(path.join(tmp, 'static/index.html'));
   // Site settings from the environment (GitHub repository variables), so nobody edits code to change a link
   const env = (k) => (process.env[k] || '').trim();
-  const cfg = { discordUrl: env('FAINTR_DISCORD_URL'), patreonUrl: '', patreonReady: false, supabaseUrl: env('SUPABASE_URL').replace(/\/$/, ''), supabaseAnonKey: env('SUPABASE_ANON_KEY'), loginProviders: env('FAINTR_LOGIN_PROVIDERS').toLowerCase(), billingEnabled: PREMIUM };
+  const cfg = { discordUrl: env('FAINTR_DISCORD_URL'), patreonUrl: '', patreonReady: false, supabaseUrl: env('SUPABASE_URL').replace(/\/$/, ''), supabaseAnonKey: env('SUPABASE_ANON_KEY'), loginProviders: env('FAINTR_LOGIN_PROVIDERS').toLowerCase(), billingEnabled: PREMIUM, analyticsEnabled:env('FAINTR_ANALYTICS_ENABLED')==='true' };
   if (PREMIUM) {
     if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) throw new Error('Premium requires Supabase.');
     const worker = fs.readFileSync(path.join(ROOT, 'web/premium-worker.js'), 'utf8')
@@ -300,7 +301,8 @@ async function assemble(src, version, built, formats) {
   fs.copyFileSync(path.join(ROOT, 'CHANGELOG.md'), path.join(tmp, 'changelog.md'));
   const v = (rel) => sha(fs.readFileSync(path.join(tmp, rel))).slice(0, 10);
   let html = fs.readFileSync(path.join(ROOT, 'ui/index.html'), 'utf8');
-  html = html.replace('<!--WEB-HEAD-->', `<meta name="description" content="FAINTR: Pokémon GO PvP team builder, team grader, IV ranks and Anti-Meta teams, built on PvPoke's battle simulator.">
+  html = rq('tools/initial-controls.cjs').initialControls(html,loadSchedule(path.join(ROOT,'schedule.json')),fmtList);
+  html = html.replace('<!--WEB-HEAD-->', `
 <link rel="canonical" href="https://faintr.com/"><meta property="og:type" content="website"><meta property="og:title" content="FAINTR: Win the matchup"><meta property="og:description" content="Free Pokémon GO PvP team tools, built on PvPoke's battle simulator."><meta property="og:image" content="https://faintr.com/static/faintr-preview.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://faintr.com/static/faintr-preview.png"><meta name="theme-color" content="#2B2F3A">`)
     .replace('<!--SHARE-SCRIPT-->', '<script src="/static/share-codec.js"></script>')
     .replace('<!--WEB-SCRIPTS-->', `<script src="/static/vendor/supabase.js?v=${v('static/vendor/supabase.js')}"></script>\n<script src="/static/viptools.js?v=${v('static/viptools.js')}"></script>\n<script src="/static/bridge.js?v=${v('static/bridge.js')}"></script>`)
@@ -327,16 +329,17 @@ async function assemble(src, version, built, formats) {
     pokemon[p.speciesId]=value;
     if(p.shadow){pokemon[p.speciesId+'_shadow']={...value,name:p.speciesName+' (Shadow)',charged:[...value.charged,'FRUSTRATION','RETURN']};}
   }
-  const shareMetadata={supabaseUrl:cfg.supabaseUrl,supabaseAnonKey:cfg.supabaseAnonKey,formats:Object.fromEntries(formats.map(f=>[f.key,f.title])),pokemon,moves:Object.fromEntries(shareGm.moves.map(m=>[m.moveId,m.name])),csp:fs.readFileSync(path.join(tmp,'_headers'),'utf8').split('Content-Security-Policy: ')[1].split('\n')[0]};
+  const shareMetadata={analyticsEnabled:cfg.analyticsEnabled,supabaseUrl:cfg.supabaseUrl,supabaseAnonKey:cfg.supabaseAnonKey,formats:Object.fromEntries(formats.map(f=>[f.key,f.title])),pokemon,moves:Object.fromEntries(shareGm.moves.map(m=>[m.moveId,m.name])),csp:fs.readFileSync(path.join(tmp,'_headers'),'utf8').split('Content-Security-Policy: ')[1].split('\n')[0]};
   const sharedWorker=(await esbuild.build({entryPoints:[path.join(ROOT,'web/share-worker.js')],bundle:true,platform:'browser',format:'esm',minify:true,write:false,plugins:[{name:'share-metadata',setup(build){build.onResolve({filter:/share-metadata\.json$/},()=>({path:'share-metadata',namespace:'faintr'}));build.onLoad({filter:/.*/,namespace:'faintr'},()=>({contents:JSON.stringify(shareMetadata),loader:'json'}));}}]})).outputFiles[0].contents;
   fs.writeFileSync(path.join(tmp,'_worker.js'),sharedWorker);
-  fs.writeFileSync(path.join(tmp,'_routes.json'),JSON.stringify({version:1,include:['/share/*','/s/*'],exclude:[]}));
+  fs.writeFileSync(path.join(tmp,'_routes.json'),JSON.stringify({version:1,include:['/share/*','/s/*',...(cfg.analyticsEnabled?['/a/event']:[])],exclude:[]}));
   const imageCode=esbuild.buildSync({entryPoints:[path.join(ROOT,'web/share-image.js')],bundle:true,platform:'node',format:'cjs',write:false}).outputFiles[0].text;
   const imageModule={exports:{}};new Function('module','exports',imageCode)(imageModule,imageModule.exports);
   const preview=await imageModule.exports.renderCard({format:'Pokemon GO PvP'});
   fs.writeFileSync(path.join(tmp,'static/faintr-preview.png'),Buffer.from(await preview.arrayBuffer()));
+  rq('tools/public-pages.cjs').publishPublicPages(tmp,{analytics:cfg.analyticsEnabled,version:v('static/config.js')});
   // Single-page app: unknown paths show the app
-  fs.writeFileSync(path.join(tmp, '_redirects'), '/changelog /changelog.md 302\n');
+  fs.writeFileSync(path.join(tmp, '_redirects'), '/changelog /changelog.md 302\n/privacy.html /privacy/ 301\n/terms.html /terms/ 301\n');
   fs.rmSync(OUT, { recursive: true, force: true });
   fs.renameSync(tmp, OUT);
   const total = Object.values(sizes).reduce((a, b) => a + b, 0);

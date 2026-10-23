@@ -23,6 +23,7 @@ function readData(u) {
   if (!(rel in FILES)) {
     const x = new XMLHttpRequest();
     x.open('GET', fileUrl('pvpoke/' + rel), false);
+    x.timeout = 20000;
     x.send();
     if (x.status !== 200) throw new Error(`Couldn't load ${rel} (${x.status}).`);
     FILES[rel] = JSON.parse(x.responseText.replace(/^\uFEFF/, ''));

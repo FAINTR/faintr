@@ -132,7 +132,7 @@ function pokemonCatalog(F){
   var battle = newBattle(F);
   return threatList(F).filter(function(t){ return t.id.indexOf('_xs') === -1; }).map(function(t){
     var p = makePokemon(t.id, battle);
-    return { id: t.id, name: t.name, rank: rank[t.id] || 9999, dex: p.dex,
+    return { id: t.id, name: t.name, rank: rank[t.id] || 9999, dex: p.dex, mega:p.hasTag('mega'),
       types: p.types.filter(function(x){ return x !== 'none'; }),
       fast: p.fastMovePool.map(function(m){ return [m.moveId, m.name]; }),
       charged: p.chargedMovePool.map(function(m){ return [m.moveId, m.name]; }),
@@ -148,6 +148,7 @@ function fullCatalog(){
     return { id: d.speciesId, name: d.speciesName, dex: d.dex, types: d.types.filter(function(x){ return x !== 'none'; }),
       fast: p.fastMovePool.map(function(m){ return [m.moveId, m.name]; }),
       charged: p.chargedMovePool.map(function(m){ return [m.moveId, m.name]; }),
+      extra: (p.extraChargedMovePool||[]).map(function(m){return [m.moveId,m.name];}),
       shadow: d.speciesId.indexOf('_shadow') > -1 };
   }).sort(function(a, b){ return a.dex - b.dex || (a.name > b.name ? 1 : -1); });
 }
@@ -161,11 +162,19 @@ function pvpokeTeamLink(members, F){
 }
 
 // ---------- IVs
+function rankedIVCombinations(p, floor){
+  var combos=p.generateIVCombinations('overall',1,4096,null,floor>0?floor:undefined);
+  // Match initialize(): all Pokémon have at least 10 HP; Shedinja is fixed at 10.
+  // PvPoke's enumeration currently floors HP without these two special cases.
+  combos.forEach(function(c){c.hp=p.dex===292?10:Math.max(10,c.hp);c.overall=c.atk*c.def*c.hp;});
+  combos.sort(function(a,b){return b.overall-a.overall;});
+  return combos;
+}
 function ivInfo(id, ivs, levelCap, F){
   F = fmtOf(F);
   var battle = newBattle(F);
   var p = makePokemon(id, battle, null, ivs || null, levelCap);
-  var combos = p.generateIVCombinations('overall', 1, 4096);
+  var combos = rankedIVCombinations(p);
   var key = function(c){ return c.ivs.atk + '/' + c.ivs.def + '/' + c.ivs.hp; };
   var mine = p.ivs.atk + '/' + p.ivs.def + '/' + p.ivs.hp;
   var rank = combos.findIndex(function(c){ return key(c) === mine; }) + 1;
@@ -198,7 +207,7 @@ function ivTable(id, cpCap, levelCap, floor){
   var cap = Math.min(levelCap || 50, 51);
   if(cap > p.baseLevelCap) p.baseLevelCap = cap;
   p.levelCap = cap;
-  var combos = p.generateIVCombinations('overall', 1, 4096, null, floor > 0 ? floor : undefined);
+  var combos = rankedIVCombinations(p,floor);
   var best = combos.length ? combos[0].overall : 1;
   var bestAtk = 0, bestDef = 0, bestHp = 0;
   combos.forEach(function(c){ if(c.atk > bestAtk) bestAtk = c.atk; if(c.def > bestDef) bestDef = c.def; if(c.hp > bestHp) bestHp = c.hp; });
@@ -361,6 +370,12 @@ function sideInfo(p){
     fast: {id: p.fastMove.moveId, name: p.fastMove.name, type: p.fastMove.type, power: p.fastMove.power, energyGain: p.fastMove.energyGain, turns: p.fastMove.cooldown / 500},
     charged: p.chargedMoves.filter(Boolean).map(function(m){ return {id: m.moveId, name: m.name, type: m.type, power: m.power, energy: m.energy}; }) };
 }
+function battleWinner(A,B){
+  // Ratings are rounded for display; a narrow timeout lead can round to 500.
+  // Compare the exact remaining HP fractions before rounding the rating.
+  var difference=A.hp*B.stats.hp-B.hp*A.stats.hp;
+  return difference>0?0:difference<0?1:-1;
+}
 function battleDetail(a, b, opts, F){
   opts = opts || {};
   var sA = opts.shieldsA === undefined ? 1 : opts.shieldsA, sB = opts.shieldsB === undefined ? 1 : opts.shieldsB;
@@ -371,15 +386,17 @@ function battleDetail(a, b, opts, F){
   });
   var out = {
     a: sideInfo(r.A), b: sideInfo(r.B),
-    ratingA: r.ra, ratingB: r.rb, winner: r.ra > 500 ? 0 : (r.rb > 500 ? 1 : -1),
+    ratingA: r.ra, ratingB: r.rb, winner: battleWinner(r.A,r.B),
     hpA: r.A.hp, hpB: r.B.hp, energyA: r.A.energy, energyB: r.B.energy,
     turns: r.battle.getTurns(), duration: r.battle.getDuration(), timeline: tl, shields: [sA, sB]
   };
   var grid = [];
   for(var i = 0; i <= 2; i++){ var row = []; for(var j = 0; j <= 2; j++){ row.push(runBattle(a, b, i, j, baitA, baitB, opts.energyA, opts.energyB, F).ra); } grid.push(row); }
   out.grid = grid;
-  var fresh = runBattle(a, b, 0, 0, true, true, 0, 0, F);
-  var A = fresh.A, B = fresh.B;
+  // Damage reference cards describe neutral starting stats, not the buffs/debuffs
+  // left over after a second, hidden battle (e.g. Superpower lowering Attack).
+  var neutralBattle = newBattle(F);
+  var A = battleSide(a, neutralBattle, 0), B = battleSide(b, neutralBattle, 1);
   function bp(att, def){
     var move = att.fastMove;
     var eff = def.typeEffectiveness[move.type];

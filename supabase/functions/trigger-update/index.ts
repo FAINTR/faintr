@@ -58,7 +58,8 @@ Deno.serve(async (req) => {
   const formats = String(body.formats ?? "").replace(/[^a-z0-9,\-]/gi, "").slice(0, 300);
   const r = await gh(`/actions/workflows/${workflow}/dispatches`, {
     method: "POST",
-    body: JSON.stringify({ ref: Deno.env.get("GITHUB_REF") ?? "main", inputs: { force: body.force ? "true" : "false", formats, requested_by: (user.email ?? user.id).slice(0, 80) } }),
+    // This repository's workflow inputs and logs are public. Never forward account identifiers.
+    body: JSON.stringify({ ref: Deno.env.get("GITHUB_REF") ?? "main", inputs: { force: body.force ? "true" : "false", formats, requested_by: "FAINTR administrator" } }),
   });
   if (r.status !== 204) return reply({ error: `GitHub said ${r.status}: ${(await r.text()).slice(0, 200)}` }, 502);
   return reply({ message: body.force ? "Full rebuild started. New data goes live in about 30 to 90 minutes." : "Update started. If PvPoke changed, new data goes live in about 5 to 60 minutes." });

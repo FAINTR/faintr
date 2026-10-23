@@ -9,6 +9,8 @@
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/config.js"></script>
 <script src="/metrics.js"></script>
+<script src="/static/storage-patches.js"></script>
+<script defer src="/static/analytics.js"></script>
 <!--SHARE-SCRIPT-->
 <!--WEB-HEAD-->
 </head>
@@ -55,6 +57,7 @@
 <div class="banner" id="updBanner" hidden></div>
 
 <main>
+  <noscript><p class="empty">FAINTR’s free team builder, grader, battle simulator and IV tools run in your browser and need JavaScript. Enable JavaScript to use them. You can still read our <a href="/sources/">data sources</a> and <a href="/privacy/">privacy policy</a>.</p></noscript>
   <!-- FAINTR Teams -->
   <section class="view on" id="view-find">
     <div class="viewhead has-tools"><h1 id="findTitle">FAINTR Teams</h1><p id="findLede">Every team from PvPoke's top 150, graded and ranked. Tell us what matters and what you own, and we'll sort the rest.</p><span class="fmttools"><span id="datainfo"><span class="dot"></span>Loading data</span>
@@ -76,7 +79,7 @@
         <div class="chips" id="chips-exclude"></div>
         <h3>Minimum grades</h3>
         <div id="mins"></div>
-        <div class="row2"><span>Shadow Pokémon</span><select id="maxShadow"><option value="">Any</option><option value="0">None</option><option value="1">At most 1</option><option value="2">At most 2</option></select></div>
+        <div class="row2"><span>Shadow Pokémon</span><select id="maxShadow" aria-label="Maximum Shadow Pokémon"><option value="">Any</option><option value="0">None</option><option value="1">At most 1</option><option value="2">At most 2</option></select></div>
         <h3>What matters most</h3>
         <p class="hint">Weights for the overall score. 0 ignores a grade.</p>
         <div id="weights"></div>
@@ -118,7 +121,7 @@
       <button class="btn" id="saveBtn" type="button" disabled>Save to My Teams</button>
       <button class="btn" id="shareGradeBtn" type="button" hidden>Share team</button>
       <button class="btn quiet" id="clearBtn" type="button">Clear</button>
-      <span class="note" id="gradeStatus"></span>
+      <span class="note" id="gradeStatus" role="status" aria-live="polite"></span>
     </div>
     <div id="gradeResult"><div class="empty">No team yet. Pick a lead and we'll find the rest.</div></div>
   </section>
@@ -133,7 +136,7 @@
         <button class="btn primary" id="battleBtn" type="button">Battle</button>
         <button class="btn" id="swapSidesBtn" type="button">Swap sides</button>
         <button class="btn" id="vsMetaBtn" type="button">Your Pokémon against the top 100</button>
-        <span class="note" id="battleStatus"></span>
+        <span class="note" id="battleStatus" role="status" aria-live="polite"></span>
       </div>
       <div id="battleResult"></div>
     </div>
@@ -149,7 +152,7 @@
           <h3>Answers from</h3>
           <span class="seg" id="cfSource" role="group" aria-label="Where answers come from"><button type="button" data-s="pool" aria-pressed="true">Top meta</button><button type="button" data-s="roster" aria-pressed="false">My Roster</button></span>
           <p class="hint" style="margin-top:8px" id="cfHint">Ranked by wins at 1 shield, then average battle rating.</p>
-          <button class="btn primary" type="button" id="cfBtn">Find counters</button> <span class="note" id="cfStatus"></span>
+          <button class="btn primary" type="button" id="cfBtn">Find counters</button> <span class="note" id="cfStatus" role="status" aria-live="polite"></span>
         </div>
       </div>
       <div id="cfResult"></div>
@@ -181,7 +184,8 @@
       <a class="btn quiet small" href="/api/roster/export" id="rExport">Export</a>
       <label class="btn quiet small" for="rImportFile" title="A FAINTR Roster file, or a CSV export from Poke Genie or Calcy IV">Import<input type="file" id="rImportFile" accept="application/json,.json,text/csv,.csv" hidden></label>
     </div>
-    <p class="note" id="rNote"></p>
+    <p class="note" id="rStorageNote"></p>
+    <p class="note" id="rNote" role="status"></p>
     <div class="rgrid" id="rGrid"></div>
   </section>
 
@@ -258,7 +262,7 @@
         <label class="field" for="bugSteps">Steps to make it happen again (optional)</label>
         <textarea id="bugSteps" rows="3" maxlength="3000" placeholder="1. Open Team Grader&#10;2. Pick ...&#10;3. ..."></textarea>
         <div id="bugEmailRow"><label class="field" for="bugEmail">Email, if you'd like a reply (optional)</label><input type="email" id="bugEmail" maxlength="200" placeholder="you@example.com"></div>
-        <div class="actions"><button class="btn primary" type="submit" id="bugSend">Send report</button><span class="note" id="bugStatus"></span></div>
+        <div class="actions"><button class="btn primary" type="submit" id="bugSend">Send report</button><span class="note" id="bugStatus" role="status" aria-live="polite"></span></div>
       </form>
       <aside class="panel bugside">
         <h3>Faster help</h3>
@@ -346,12 +350,13 @@
         <label class="field" for="rfFast">Fast move</label><select id="rfFast" disabled></select>
         <label class="field" for="rfC1">Charged move 1</label><select id="rfC1" disabled></select>
         <label class="field" for="rfC2">Charged move 2</label><select id="rfC2" disabled></select>
+        <div id="rfExtraRow" hidden><label class="field" for="rfExtra">Additional charged move</label><select id="rfExtra" disabled></select></div>
         <p class="hint" style="margin-top:6px">Leave the moves on PvPoke's pick if you haven't TMed it yet.</p>
         <label class="field" for="rfNotes">Notes (optional)</label><input type="text" id="rfNotes" maxlength="80" style="width:100%" placeholder="e.g. needs Elite TM, trade bait, for Fantasy Cup">
         <div class="rfpreview" id="rfPreview"></div>
       </div>
     </div>
-    <div class="actions"><button class="btn primary" type="button" id="rfSave">Save to Roster</button><button class="btn" type="button" id="rfCancel">Cancel</button><span class="note" id="rfStatus"></span></div>
+    <div class="actions"><button class="btn primary" type="button" id="rfSave">Save to Roster</button><button class="btn" type="button" id="rfCancel">Cancel</button><span class="note" id="rfStatus" role="status" aria-live="polite"></span></div>
   </form>
 </dialog>
 
@@ -375,7 +380,7 @@
       <div class="actions"><button class="btn primary" type="submit" id="authGo">Sign in</button><button class="btn quiet small" type="button" id="authMagic">Email me a sign-in link</button><button class="btn quiet small" type="button" id="authForgot">Forgot password?</button></div>
     </form>
     <div class="authalt" id="authAlt" hidden><button class="btn discordbtn" type="button" id="authDiscord" hidden>Continue with Discord</button><button class="btn googlebtn" type="button" id="authGoogle" hidden>Continue with Google</button></div>
-    <p class="note" id="authStatus"></p>
+    <p class="note" id="authStatus" role="status" aria-live="polite"></p>
     <p class="note">By creating an account, you agree to the <a href="https://faintr.com/terms/" target="_blank" rel="noopener">Terms of Use</a>. Read our <a href="https://faintr.com/privacy/" target="_blank" rel="noopener">Privacy Policy</a> to learn how your information is handled.</p>
   </div>
   <div id="authIn" hidden>
@@ -390,7 +395,7 @@
       <p class="note">This permanently deletes your account, your Roster and your saved teams. Download your Roster first from the Roster tab if you want a copy.</p>
       <div class="actions"><button class="btn small" type="button" id="authDelete">Delete my account</button><span class="confirm" id="authDeleteConfirm" hidden>Sure? This can't be undone. <button class="btn small primary" type="button" id="authDeleteYes">Yes, delete it</button></span></div>
     </details>
-    <p class="note" id="authStatus2"></p>
+    <p class="note" id="authStatus2" role="status" aria-live="polite"></p>
   </div>
   <div class="actions" style="justify-content:flex-end"><button class="btn quiet" type="button" id="authClose">Close</button></div>
 </dialog>
