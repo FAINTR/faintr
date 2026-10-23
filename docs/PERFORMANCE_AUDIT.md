@@ -1,5 +1,7 @@
 # Performance evidence — October 23, 2026
 
+Follow-up: a 2,000-entry synthetic roster reproduced a severe DOM/rendering bottleneck. A bounded 50-entry page now preserves full-roster search and export. Additional timing samples, DOM counts, continuous-session results and measurement limits are recorded in `FOLLOWUP_AUDIT.md`; the original cold-load measurements below remain unchanged.
+
 ## Live baseline
 
 The existing Cloudflare Web Analytics dashboard was inspected read-only. For its previous-24-hour, bot-excluded faintr.com view before this release, it showed:

@@ -98,11 +98,42 @@ test('short sharing is usable, can close, and preserves the exact team', async (
   // The real worker/codec round trip and old links are tested in tools/test-sharing.cjs.
 });
 test('failed startup shows a recoverable error', async ({page}) => {
-  await page.route('**/manifest.json',route=>route.abort());
+  const fail=route=>route.abort();
+  await page.route('**/manifest.json',fail);
   await page.goto('/');
   await expect(page.locator('#loaderTitle')).toHaveText("Couldn't load teams");
   await expect(page.locator('#loaderProg')).toBeHidden();
   await expect(page.locator('#loaderNote')).toContainText('reloading');
+  await expect(page.locator('#loaderRetry')).toBeVisible();await fits(page);
+  await page.unroute('**/manifest.json',fail);await page.locator('#loaderRetry').click();
+  await expect(page.locator('#teams .team').first()).toBeVisible();
+  await expect(page.locator('#loader')).toBeHidden();
+});
+
+test('an invalid shared team has persistent recovery controls',async({page})=>{
+  const invalid={...setup,m:setup.m.map((m,i)=>i?m:{...m,id:'unknown_pokemon'})};
+  await page.goto('/share/'+codec.encode(invalid));
+  await expect(page.locator('#sharedTeamError')).toBeVisible();
+  await expect(page.locator('#sharedTeamNote')).toBeHidden();
+  await expect(page.locator('#sharedRetryBtn')).toBeVisible();await fits(page);
+  await page.locator('#sharedRetryBtn').click();await expect(page.locator('#sharedTeamError')).toBeVisible();
+  await page.locator('#sharedTeamError').getByRole('link',{name:'Browse current teams'}).click();
+  await expect(page.locator('#teams .team').first()).toBeVisible();await expect(page.locator('#sharedTeamError')).toBeHidden();
+});
+
+test('a temporary shared-preview failure retries the same team successfully',async({page})=>{
+  const worker=(await import('data:text/javascript;base64,'+fs.readFileSync('site/_worker.js').toString('base64'))).default;
+  let attempts=0;const pathname='/share/'+codec.encode(setup);
+  const env={ASSETS:{fetch:async()=>{if(++attempts===1)throw Error('Synthetic unavailable asset');return new Response(fs.readFileSync('site/index.html'),{headers:{'Content-Type':'text/html'}});}}};
+  await page.route('**'+pathname,async route=>{
+    const response=await worker.fetch(new Request(route.request().url()),env,{waitUntil:()=>{}});
+    await route.fulfill({status:response.status,headers:Object.fromEntries(response.headers),body:await response.text()});
+  });
+  await page.goto(pathname);await expect(page.getByRole('heading',{name:'This team is temporarily unavailable'})).toBeVisible();
+  await expect(page.getByRole('link',{name:'Browse current teams'})).toBeVisible();await fits(page);
+  await page.getByRole('link',{name:'Try this link again'}).click();
+  await expect(page.locator('#sharedTeamNote')).toBeVisible();await expect(page.locator('#slots')).toContainText('Azumarill');await fits(page);
+  expect(attempts).toBe(2);
 });
 test('legacy shared team restores all moves and IVs in the grader',async({page})=>{
   await page.goto('/share/'+codec.encode(setup));
@@ -140,6 +171,29 @@ test('populated battle, timeline and detailed tables fit on phones',async({page}
   await expect(page.locator('#battleResult svg')).toBeVisible();
 });
 
+test('battle results and IV comparisons use the exact winner when ratings round to 500',async({page})=>{
+  await loaded(page);await page.locator('#cupSel').selectOption('all-1500');await expect(page.locator('#matched')).toContainText('Great League');
+  await page.getByRole('tablist',{name:'Sections'}).getByRole('tab',{name:'Matchups',exact:true}).click();
+  for(const [i,name] of ['Azumarill','Clodsire'].entries()){
+    const editor=page.locator('#bsides .ed').nth(i);await editor.locator('.picker input').fill(name);await editor.locator('.suggest button').first().click();
+  }
+  await page.evaluate(()=>{
+    const original=window.FAINTR_BRIDGE.api;window.__syntheticWinner=0;
+    window.FAINTR_BRIDGE.api=async(url,body)=>{
+      if(url.split('?')[0]!=='/api/battle')return original(url,body);
+      const side=(name,hp)=>({name,stats:{atk:100,def:150,hp},ivs:{atk:0,def:15,hp:15}}),bp={move:'Test fast move',damage:1,attack:100,next:null};
+      return {a:side('Azumarill',334),b:side('Clodsire',397),ratingA:500,ratingB:500,winner:window.__syntheticWinner,hpA:167,hpB:198,energyA:10,energyB:20,turns:1,timeline:[],shields:[1,1],grid:[[500,500,500],[500,500,500],[500,500,500]],breakpoints:{a:bp,b:bp},chargedDamage:{a:[],b:[]}};
+    };
+  });
+  for(const [winner,label] of [[0,'Win'],[1,'Loss'],[-1,'Tie']]){
+    await page.evaluate(w=>window.__syntheticWinner=w,winner);await page.locator('#battleBtn').click();
+    await expect(page.locator('#battleResult .vs')).toHaveText(label);
+    await expect(page.locator('#battleResult')).toContainText(label+', 167 HP left');await fits(page);
+  }
+  await expect(page.locator('#battleResult')).toContainText('the game chooses priority at random');
+  await expect(page.locator('#battleResult .rating.l')).toHaveCount(0);
+});
+
 test('supporters, policies, licenses and sources fit and have working home links',async({page})=>{
   for(const path of ['supporters','privacy','terms','licenses','sources']) {
     const response=await page.goto('/'+path+'/');expect(response.status()).toBe(200);
@@ -163,6 +217,32 @@ test('roster editing persists locally and the dialog fits',async({page},info)=>{
   await expect(page.locator('#teams .team').first()).toBeVisible();
   await page.getByRole('tab',{name:'Roster',exact:true}).click();
   await expect(page.locator('#rGrid')).toContainText('Release test Azumarill');
+});
+
+test('a 2,000-entry roster pages, searches, edits and exports every entry',async({page})=>{
+  await page.addInitScript(()=>{
+    if(localStorage.getItem('faintr.web.roster'))return;
+    const roster=Array.from({length:2000},(_,i)=>({uid:'stress-'+i,id:'azumarill',name:'Azumarill',nickname:'Synthetic '+String(i).padStart(4,'0'),types:['water','fairy'],dex:184,ivs:{atk:0,def:15,hp:15},cp:1498,levelCap:50,leagues:[1500],moveset:['BUBBLE','ICE_BEAM','PLAY_ROUGH'],added:'2026-10-23',eval:{v:2,leagues:[{cp:1500,level:45,maxCp:1498,rank:20,count:4096,pctOfBest:99,status:'ready'}],evolves:[]}}));
+    localStorage.setItem('faintr.web.roster',JSON.stringify(roster));
+  });
+  await loaded(page);await page.getByRole('tab',{name:'Roster',exact:true}).click();
+  await expect(page.locator('#rNote')).toContainText('2000 Pokémon saved');
+  await expect(page.locator('#rGrid [data-uid]')).toHaveCount(50);
+  await expect(page.locator('#rPager')).toContainText('Page 1 of 40');await fits(page);
+  await page.locator('#rPager').getByRole('button',{name:'Next',exact:true}).click();
+  await expect(page.locator('#rPager')).toContainText('Page 2 of 40');await expect(page.locator('#rGrid [data-uid="stress-50"]')).toBeVisible();
+  await page.locator('#rView button[data-v="list"]').click();
+  await expect(page.locator('#rGrid tbody tr')).toHaveCount(50);await expect(page.locator('#rPager')).toContainText('Page 1 of 40');await fits(page);
+  await page.locator('#rPagerBottom').getByRole('button',{name:'Next',exact:true}).click();await expect(page.locator('#rPager')).toContainText('Page 2 of 40');
+  await page.locator('#rSearch').fill('Synthetic 1999');await expect(page.locator('#rGrid [data-uid]')).toHaveCount(1);await expect(page.locator('#rPager')).toBeHidden();
+  await page.locator('#rGrid [data-act="edit"]').click();await page.locator('#rfNick').fill('Synthetic 1999 edited');await page.locator('#rfSave').click();
+  await expect(page.locator('#rDlg')).toBeHidden();await expect(page.locator('#rGrid')).toContainText('Synthetic 1999 edited');
+  await page.reload();await expect(page.locator('#teams .team').first()).toBeVisible();await page.getByRole('tab',{name:'Roster',exact:true}).click();
+  await page.locator('#rSearch').fill('Synthetic 1999');await expect(page.locator('#rGrid')).toContainText('Synthetic 1999 edited');
+  const pending=page.waitForEvent('download');await page.locator('#rExport').click();const file=await pending;
+  const exported=JSON.parse(fs.readFileSync(await file.path(),'utf8'));expect(exported.roster).toHaveLength(2000);
+  expect(exported.roster.find(e=>e.uid==='stress-1999').nickname).toBe('Synthetic 1999 edited');
+  await page.locator('#rSearch').fill('');await expect(page.locator('#rGrid [data-uid]')).toHaveCount(50);await expect(page.locator('#rPager')).toContainText('Page 1 of 40');
 });
 test('tool tabs and Pokémon suggestions support keyboard selection',async({page})=>{
  await loaded(page);const species=(await page.locator('#teams .name').first().innerText()).trim();const teams=page.getByRole('tab',{name:'Teams',exact:true});await teams.focus();await teams.press('ArrowRight');

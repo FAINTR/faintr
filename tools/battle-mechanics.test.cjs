@@ -99,3 +99,105 @@ test('team rules reject duplicate species/forms and multiple Megas but allow dis
  assert.match(teamError([{dex:6,mega:true},{dex:150,mega:true}]),/Mega/);
  assert.equal(teamError([{dex:6},{dex:150},{dex:376}]),null);
 });
+
+// Scripted turns are test-only: the public simulator still uses automatic decisions.
+run(`function scriptedBattle(a,b,options){
+ var battle=newBattle(F),A=battleSide(a,battle,0),B=battleSide(b,battle,1),sides=[A,B];
+ sides.forEach((p,i)=>{battle.setNewPokemon(p,i,false);p.setShields(options.shields||0);p.setStartEnergy(options.energy===undefined?100:options.energy);if(options.hp)p.setStartHp(options.hp);if(options.buffs)p.setStartBuffs(options.buffs[i]);});
+ battle.setSandboxMode(true);battle.setActions(options.actions.map(x=>new TimelineAction(x.type||'charged',x.actor,x.turn||1,x.move||0,{shielded:!!x.shielded,buffs:!!x.buffs,charge:1})));
+ battle.simulate();return {events:battle.getTimeline(),hp:sides.map(p=>p.hp),energy:sides.map(p=>p.energy),cost:sides[0].chargedMoves[0].energy,attack:sides.map(p=>p.stats.atk),effectiveAttack:sides.map(p=>p.getEffectiveStat(0)),buffs:sides.map(p=>p.statBuffs)};
+}`);
+
+test('CMP uses unrounded Attack and ignores Shadow and buff damage multipliers on either side',()=>{
+ const high=mon('dragonite',['DRAGON_BREATH','DRAGON_CLAW']);
+ const low={...mon('dragonite_shadow',['DRAGON_BREATH','DRAGON_CLAW']),ivs:{atk:14,def:15,hp:15}};
+ for(const reverse of [false,true]){
+  const options={buffs:reverse?[[4,0],[-4,0]]:[[-4,0],[4,0]],actions:[{actor:0},{actor:1}]};
+  const r=run('scriptedBattle(a,b,options)',{a:reverse?low:high,b:reverse?high:low,options,F});
+  const higher=reverse?1:0;assert(r.attack[higher]>r.attack[1-higher]);
+  assert(r.effectiveAttack[higher]<r.effectiveAttack[1-higher]);
+  const charged=r.events.filter(e=>e.type.startsWith('charged'));
+  assert.equal(charged[0].actor,higher);assert.equal(charged[0].turn,charged[1].turn);
+ }
+});
+
+test('a CMP knockout cancels the lower-Attack charged move and preserves its energy',()=>{
+ const a=mon('dragonite',['DRAGON_BREATH','DRAGON_CLAW']),b={...a,ivs:{atk:14,def:15,hp:15}};
+ const r=run('scriptedBattle(a,b,{hp:10,actions:[{actor:0},{actor:1}]})',{a,b,F});
+ assert.deepEqual(Array.from(r.hp),[10,0]);assert.equal(r.events.filter(e=>e.type.startsWith('charged')).length,1);
+ assert.equal(r.energy[1],100);assert.equal(r.energy[0],100-r.cost);
+});
+
+test('equal-Attack charged knockout mirrors use the reference engine tie approximation',()=>{
+ const a=mon('dragonite',['DRAGON_BREATH','DRAGON_CLAW']);
+ const r=run('scriptedBattle(a,a,{hp:10,actions:[{actor:0},{actor:1}]})',{a,F});
+ // Actual game CMP ties are random. Native simulation resolves both for a symmetric result.
+ assert.deepEqual(Array.from(r.hp),[0,0]);assert.equal(r.events.filter(e=>e.type.startsWith('charged')).length,2);
+});
+
+test('a charged attack resolves before an incoming one-turn fast knockout',()=>{
+ const a=mon('dragonite',['DRAGON_BREATH','DRAGON_CLAW']);
+ const r=run('scriptedBattle(a,a,{hp:1,actions:[{actor:1}]})',{a,F});
+ assert.equal(r.events.find(e=>e.type.startsWith('charged')).actor,1);
+ assert.deepEqual(Array.from(r.hp),[0,1]);
+ assert(!r.events.some(e=>e.type.startsWith('fast')));
+});
+
+test('guaranteed self debuffs and opponent debuffs survive shielding and clamp at four stages',()=>{
+ const cases=[{a:metal,move:'SUPER_POWER',target:'A',stages:[-1,-1]},
+  {a:mon('dewgong',['ICE_SHARD','ICY_WIND','DRILL_RUN']),move:'ICY_WIND',target:'B',stages:[-1,0]}];
+ for(const row of cases){
+  const r=run(`var battle=newBattle(F),A=battleSide(a,battle,0),B=battleSide(b,battle,1);
+   battle.setNewPokemon(A,0,false);battle.setNewPokemon(B,1,false);B.setShields(2);battle.setSandboxMode(true);battle.start();
+   var move=A.chargedMoves.find(m=>m.moveId===moveId),snapshots=[];
+   for(var i=0;i<6;i++){A.energy=100;battle.useMove(A,B,move,true,false,1);snapshots.push({a:A.statBuffs.slice(),b:B.statBuffs.slice(),damage:battle.getTimeline().filter(e=>e.type.indexOf('charged')===0).slice(-1)[0].values[0],shields:B.shields,energy:A.energy});}
+   ({snapshots,cost:move.energy})`,{a:row.a,b:regi,moveId:row.move,F});
+  assert.equal(r.snapshots[0].damage,1);assert.equal(r.snapshots[0].shields,1);
+  assert.deepEqual(Array.from(r.snapshots[0][row.target.toLowerCase()]),row.stages);
+  assert.deepEqual(Array.from(r.snapshots[5][row.target.toLowerCase()]),row.stages.map(s=>s?-4:0));
+  assert(r.snapshots.every(s=>s.energy===100-r.cost));
+ }
+});
+
+test('stat-stage multipliers apply before damage flooring and remain separate from Shadow modifiers',()=>{
+ const r=run(`var battle=newBattle(F),A=battleSide(a,battle,0),B=battleSide(b,battle,1),rows=[];
+  for(var stage=-4;stage<=4;stage++){A.statBuffs=[stage,0];B.statBuffs=[0,-stage];var m=A.fastMove;
+   rows.push({stage,baseA:A.stats.atk,baseD:B.stats.def,attack:A.getEffectiveStat(0),defense:B.getEffectiveStat(1),power:m.power,stab:m.stab,effect:B.typeEffectiveness[m.type],damage:DamageCalculator.damage(A,B,m)});}rows`,{a:mon('dragonite_shadow',['DRAGON_BREATH']),b:regi,F});
+ const mult=s=>s>0?(4+s)/4:4/(4-s);
+ for(const row of r){
+  assert(Math.abs(row.attack-row.baseA*mult(row.stage)*1.2)<1e-7);
+  assert(Math.abs(row.defense-row.baseD*mult(-row.stage))<1e-7);
+  assert.equal(row.damage,Math.floor(.5*row.power*row.stab*row.attack/row.defense*row.effect*1.2999999523162842)+1);
+ }
+});
+
+test('Morpeko alternates Aura Wheel types, pays energy once and resets form between battles',()=>{
+ const F={cup:'all',cp:1500,meta:'great'},a=mon('morpeko_full_belly',['THUNDER_SHOCK','AURA_WHEEL_ELECTRIC','PSYCHIC_FANGS']);
+ const r=run(`var battle=newBattle(F),A=battleSide(a,battle,0),B=battleSide(b,battle,1);
+  battle.setNewPokemon(A,0,false);battle.setNewPokemon(B,1,false);B.setShields(2);battle.setSandboxMode(true);battle.start();var rows=[];
+  for(var i=0;i<2;i++){A.energy=100;var move=A.chargedMoves.find(m=>m.moveId.indexOf('AURA_WHEEL')===0),used=move.moveId;battle.useMove(A,B,move,true,false,1);rows.push({used,form:A.activeFormId,energy:A.energy,buffs:A.statBuffs.slice()});}
+  battle.start();({rows,resetForm:A.activeFormId,resetBuffs:A.statBuffs})`,{a,b:mon('registeel',['LOCK_ON','FOCUS_BLAST','ZAP_CANNON']),F});
+ assert.equal(r.rows[0].used,'AURA_WHEEL_ELECTRIC');assert.equal(r.rows[0].form,'morpeko_hangry');
+ assert.equal(r.rows[1].used,'AURA_WHEEL_DARK');assert.equal(r.rows[1].form,'morpeko_full_belly');
+ assert(r.rows.every(row=>row.energy===55));assert.deepEqual(Array.from(r.rows[1].buffs),[2,0]);
+ assert.equal(r.resetForm,'morpeko_full_belly');assert.deepEqual(Array.from(r.resetBuffs),[0,0]);
+});
+
+test('Morpeko also alternates after non-Aura-Wheel charged attacks',()=>{
+ const F={cup:'all',cp:1500,meta:'great'},a=mon('morpeko_full_belly',['THUNDER_SHOCK','PSYCHIC_FANGS','AURA_WHEEL_ELECTRIC']);
+ const forms=run(`var battle=newBattle(F),A=battleSide(a,battle,0),B=battleSide(b,battle,1);battle.setNewPokemon(A,0,false);battle.setNewPokemon(B,1,false);battle.start();
+  [0,1,2].map(function(){A.energy=100;B.hp=B.stats.hp;battle.useMove(A,B,A.chargedMoves.find(m=>m.moveId==='PSYCHIC_FANGS'));return A.activeFormId;})`,{a,b:regi,F});
+ assert.deepEqual(Array.from(forms),['morpeko_hangry','morpeko_full_belly','morpeko_hangry']);
+});
+
+test('Morpeko compatibility rule never overwrites a future explicit upstream rule',()=>{
+ const boot=require('../engine_glue').BOOT;
+ for(const explicit of [null,{type:'future-rule',alternativeFormId:'upstream-form'}]){
+  const full={formChange:{type:'toggle',trigger:'charged_move',alternativeFormId:'morpeko_hangry',moveId:'ANY',resetOnSwitch:true}},hangry={};
+  if(explicit)hangry.formChange=explicit;
+  const gm={getPokemonById:id=>id==='morpeko_full_belly'?full:hangry};
+  vm.runInNewContext(boot,{GameMaster:{getInstance:()=>gm},$:{__flush(){}}});
+  if(explicit)assert.equal(hangry.formChange,explicit);
+  else{assert.equal(hangry.formChange.alternativeFormId,'morpeko_full_belly');assert.equal(full.formChange.alternativeFormId,'morpeko_hangry');}
+ }
+});

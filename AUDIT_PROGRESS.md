@@ -1,5 +1,11 @@
 # FAINTR audit completion record
 
+## October 23 follow-up in progress
+
+The owner requested all four further checks: account/device sync, shared-link recovery, large-roster/long-session stress and battle edge cases. Physical-phone testing was explicitly deferred: “Continue automated checks; phone testing later.” Two live disposable test-account availability is still awaiting a response; do not use customer accounts. Continue independent automated work.
+
+New work is tracked in `docs/FOLLOWUP_AUDIT.md`. It includes persistent sharing/startup recovery, roster pagination after a measured DOM bottleneck, synthetic two-device storage stress, new mechanics regression cases, a verified missing Morpeko reverse-form transition, and battle result labels that use exact winners rather than rounded ratings. None of these follow-up changes is published yet. The completion record below describes the earlier audit, not this new work. Preserve free access and keep optional analytics off.
+
 Updated October 23, 2026. The reviewed application fixes are published and verified. This records the bounded audit results; it is not a guarantee that every device, matchup or security scenario has been exhaustively tested.
 
 ## Published releases

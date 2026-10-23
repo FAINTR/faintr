@@ -92,7 +92,7 @@
           <strong id="matched"></strong>
           <span class="tierlegend" id="tierLegend"></span>
         </div>
-        <div class="loader" id="loader" role="status" hidden><b id="loaderTitle">Loading teams…</b><progress id="loaderProg" aria-label="Team data download"></progress><span class="note" id="loaderNote">Your teams will appear here when ready.</span></div>
+        <div class="loader" id="loader" role="status" hidden><b id="loaderTitle">Loading teams…</b><progress id="loaderProg" aria-label="Team data download"></progress><span class="note" id="loaderNote">Your teams will appear here when ready.</span><button class="btn" type="button" id="loaderRetry" hidden>Reload and try again</button></div>
         <div class="teams" id="teams"></div>
         <button class="btn quiet more" id="moreBtn" type="button" hidden>Show 50 more</button>
       </div>
@@ -109,6 +109,11 @@
   <!-- Team Grader -->
   <section class="view" id="view-grade">
     <div class="viewhead"><h1>Team Grader</h1><p id="gradeLede">Pick three Pokémon, their moves and your IVs, or load them from your Roster. We battle each one against every Pokémon in the league at 0, 1 and 2 shields, then show you what the team does well, what beats it, and how to play it.</p></div>
+    <div id="sharedTeamError" class="shared-team-note panel" role="alert" hidden>
+      <strong>This shared team couldn't open</strong>
+      <p id="sharedTeamErrorMessage" class="note"></p>
+      <div class="actions"><button class="btn" type="button" id="sharedRetryBtn">Try this link again</button><a class="btn" href="/">Browse current teams</a></div>
+    </div>
     <div id="sharedTeamNote" class="shared-team-note panel" hidden>
       <strong>A team someone shared with you</strong>
       <p class="note">The same Pokémon, moves, IVs and league are loaded below. Results use the latest available game data.</p>
@@ -186,7 +191,9 @@
     </div>
     <p class="note" id="rStorageNote"></p>
     <p class="note" id="rNote" role="status"></p>
+    <nav class="roster-pages" id="rPager" aria-label="Roster pages" hidden><button class="btn" type="button" data-step="-1" aria-controls="rGrid">Previous</button><span class="note" data-page-status aria-live="polite"></span><button class="btn" type="button" data-step="1" aria-controls="rGrid">Next</button></nav>
     <div class="rgrid" id="rGrid"></div>
+    <nav class="roster-pages" id="rPagerBottom" aria-label="Roster pages at bottom" hidden><button class="btn" type="button" data-step="-1" aria-controls="rGrid">Previous</button><span class="note" data-page-status></span><button class="btn" type="button" data-step="1" aria-controls="rGrid">Next</button></nav>
   </section>
 
   <!-- PvP IVs -->

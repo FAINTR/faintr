@@ -817,8 +817,9 @@ function timelineSVG(r) {
     <div class="legendrow" style="margin-top:4px"><span><i class="sw" style="background:var(--fr-red)"></i>${esc(r.a.name)} HP</span><span><i class="sw" style="background:var(--data-2)"></i>${esc(r.b.name)} HP</span><span>Gray shield = shield used</span></div>`;
 }
 function renderBattle(r, alt) {
-  const win = r.ratingA > 500, lose = r.ratingA < 500;
-  const ivRow = (label, x) => (x ? `<tr><td>${label}</td><td class="n">${x.a.ivs.atk} / ${x.a.ivs.def} / ${x.a.ivs.hp}</td><td class="n ${cls(x.ratingA)}">${x.ratingA}</td><td>${x.ratingA > 500 ? 'Win' : x.ratingA < 500 ? 'Loss' : 'Tie'}, ${x.hpA} HP left</td></tr>` : '');
+  const outcome=x=>x.winner===0?1:x.winner===1?-1:x.winner===-1?0:Math.sign(x.hpA*x.b.stats.hp-x.hpB*x.a.stats.hp);
+  const win = outcome(r)>0, lose = outcome(r)<0;
+  const ivRow = (label, x) => (x ? `<tr><td>${label}</td><td class="n">${x.a.ivs.atk} / ${x.a.ivs.def} / ${x.a.ivs.hp}</td><td class="n ${cls(x.ratingA)}">${x.ratingA}</td><td>${outcome(x)>0 ? 'Win' : outcome(x)<0 ? 'Loss' : 'Tie'}, ${x.hpA} HP left</td></tr>` : '');
   const fastLine = (side, other) => { const b = r.breakpoints[side]; return `${esc(r[side].name)}'s ${esc(b.move)} does <b>${b.damage}</b> damage to ${esc(r[other].name)}${b.next ? `. It would do ${b.next.damage} at ${b.next.attack} Attack (you have ${b.attack}).` : '. That is the most it can do with any IVs.'}`; };
   $('#battleResult').innerHTML = `<article class="panel bresult">
     <div class="bhead"><div class="side"><div class="note">Your Pokémon</div><h3 style="margin:2px 0;font-size:24px">${esc(r.a.name)}</h3>
@@ -826,14 +827,14 @@ function renderBattle(r, alt) {
         <div class="hpbar"><i style="width:${(r.hpA / r.a.stats.hp * 100).toFixed(0)}%"></i></div></div>
       <div class="vs">${win ? 'Win' : lose ? 'Loss' : 'Tie'}</div>
       <div class="side r"><div class="note">Opponent</div><h3 style="margin:2px 0;font-size:24px">${esc(r.b.name)}</h3>
-        <div class="rating ${r.ratingB > 500 ? 'w' : 'l'}">${r.ratingB}</div><div class="note">${r.hpB} of ${r.b.stats.hp} HP left, ${r.energyB} energy</div>
+        <div class="rating ${lose ? 'w' : win ? 'l' : ''}">${r.ratingB}</div><div class="note">${r.hpB} of ${r.b.stats.hp} HP left, ${r.energyB} energy</div>
         <div class="hpbar r"><i style="width:${(r.hpB / r.b.stats.hp * 100).toFixed(0)}%"></i></div></div></div>
     <div class="timeline"><p class="note" style="margin:0 0 4px">${esc(title())}. ${r.shields[0]} vs ${r.shields[1]} shields, ${r.turns} turns. Dots are fast moves and colored bars are charged moves, in the move's type color. The lower chart is HP. Scroll the chart on a phone; the turn-by-turn log below lists every event.</p>${timelineSVG(r)}</div>
     <div class="subview twocol" style="padding-top:0">
       <div><h3 style="margin:0 0 6px">Every shield scenario</h3><p class="hint">Your battle rating with your shields down the side and theirs across.</p>
         <table class="t grid3"><thead><tr><th>You \\ Them</th>${[0, 1, 2].map((j) => `<th class="n">${j}</th>`).join('')}</tr></thead>
         <tbody>${r.grid.map((row, i) => `<tr><th>${i} shield${i === 1 ? '' : 's'}</th>${row.map((v) => `<td class="n ${cls(v)}">${v}</td>`).join('')}</tr>`).join('')}</tbody></table>
-        <h3 style="margin:16px 0 6px">IV matchup</h3><p class="hint">This same battle with different IVs on your side. Higher Attack also wins CMP ties: when both Pokémon throw a charged move on the same turn, the higher Attack goes first.</p>
+        <h3 style="margin:16px 0 6px">IV matchup</h3><p class="hint">This same battle with different IVs on your side. When both use a charged move on the same turn (CMP), the higher unrounded Attack goes first. Shadow bonuses and stat buffs do not change CMP. Equal-Attack ties use a symmetric approximation here; the game chooses priority at random.</p>
         <table class="t"><thead><tr><th>IVs</th><th class="n">Atk / Def / HP</th><th class="n">Rating</th><th>Result</th></tr></thead><tbody>
           ${ivRow('Yours', r)}${ivRow('PvPoke default', alt.def)}${ivRow('Rank 1', alt.r1)}</tbody></table></div>
       <div><h3 style="margin:0 0 6px">Damage and breakpoints</h3>
@@ -899,7 +900,8 @@ async function runCounters() {
 }
 
 /* ======================= ROSTER ======================= */
-const R = { league: null, view: store.get('faintr.rview') || 'cards' };
+const R = { league: null, view: store.get('faintr.rview') || 'cards', page:0, query:null };
+const ROSTER_PAGE_SIZE=50;
 async function loadRoster() {
   S.roster = await api('/api/roster', undefined, { noF: true });
   $('#rStorageNote').textContent=WEB&&window.FAINTR_BRIDGE.auth.available?(window.FAINTR_BRIDGE.state.user?'Saved to your FAINTR account. Sign in with the same account on another device. Clearing browser data signs you out; it does not erase your saved Roster.':'Sign in to save a private Roster to your account. Your saved Roster returns when you sign in again.'):'Saved only in this browser. Clearing browser data removes this local Roster. Export a copy before switching devices.';
@@ -961,6 +963,17 @@ function rosterList() {
 function renderRoster() {
   const el = $('#rGrid'); if (!el || !S.info) return;
   const { lg, counts, list } = rosterList();
+  const query=JSON.stringify([lg,$('#rSearch').value,$('#rSort').value,$('#rFilter').value,R.view]);
+  if(R.query!==query){R.page=0;R.query=query;}
+  const pages=Math.max(1,Math.ceil(list.length/ROSTER_PAGE_SIZE));
+  R.page=Math.max(0,Math.min(R.page,pages-1));
+  const start=R.page*ROSTER_PAGE_SIZE,visible=list.slice(start,start+ROSTER_PAGE_SIZE);
+  for(const pager of [$('#rPager'),$('#rPagerBottom')]){
+    pager.hidden=pages<=1;
+    $('[data-page-status]',pager).textContent=`${fmt(start+1)}–${fmt(start+visible.length)} of ${fmt(list.length)} · Page ${R.page+1} of ${pages}`;
+    $('[data-step="-1"]',pager).disabled=R.page===0;
+    $('[data-step="1"]',pager).disabled=R.page===pages-1;
+  }
   $('#rLeague').innerHTML = [500, 1500, 2500, 10000].map((cp) => `<button type="button" data-cp="${cp}" aria-pressed="${cp === lg}">${LEAGUE_NAME[cp]}</button>`).join('');
   $$('#rView button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.v === R.view));
   const n1 = S.roster.filter((e) => rankIn(e, lg) === 1).length;
@@ -977,7 +990,7 @@ function renderRoster() {
     el.className = 'rlist panel scroll';
     const cell = (e, cp) => { const l = leagueOf(e, cp); if (!l || l.eligible === false) return '<td class="n note">—</td>'; return `<td class="n ${l.status === 'over' ? 'note' : ''}" title="${l.status === 'ready' ? 'Ready' : l.status === 'powerup' ? `Power up to L${l.level}` : l.status === 'over' ? 'Over the cap' : `L${l.level}`}">${l.rank === 1 ? `1 ${STAR}` : fmt(l.rank)}<span class="pct"> ${l.pctOfBest.toFixed(0)}%</span></td>`; };
     el.innerHTML = `<table class="t"><thead><tr><th></th><th>Pokémon</th><th class="n">CP</th><th class="n">IVs</th>${[500, 1500, 2500, 10000].map((cp) => `<th class="n ${cp === lg ? 'sel' : ''}">${LEAGUE_NAME[cp]}</th>`).join('')}<th>Moves</th><th></th></tr></thead><tbody>
-      ${list.map((e) => `<tr data-uid="${e.uid}"><td class="mini"><span class="crest sm ${e.shiny ? 'shiny' : ''}">${crestFor(e)}</span></td>
+      ${visible.map((e) => `<tr data-uid="${e.uid}"><td class="mini"><span class="crest sm ${e.shiny ? 'shiny' : ''}">${crestFor(e)}</span></td>
         <td><b>${esc(e.nickname || e.name)}</b>${e.pinned ? ' <span class="pin" title="Pinned">Pinned</span>' : ''}${e.shiny ? ' <span class="shinytag">Shiny</span>' : ''}${counts.get(e.id) > 1 ? ` <span class="dupe" title="You have ${counts.get(e.id)} of these">×${counts.get(e.id)}</span>` : ''}<div class="note">${e.nickname ? esc(e.name) : ''}${e.notes ? `${e.nickname ? ' · ' : ''}${esc(e.notes)}` : ''}</div></td>
         <td class="n">${e.cp ? fmt(e.cp) : '—'}</td><td class="n">${e.ivs.atk}/${e.ivs.def}/${e.ivs.hp}</td>${[500, 1500, 2500, 10000].map((cp) => cell(e, cp)).join('')}
         <td class="note rmv">${esc(e.moveNames && e.moveNames.length ? e.moveNames.join(', ') : "PvPoke's pick")}</td>
@@ -985,7 +998,7 @@ function renderRoster() {
     return;
   }
   el.className = 'rgrid';
-  el.innerHTML = list.map((e) => {
+  el.innerHTML = visible.map((e) => {
     const nm = e.nickname || e.name;
     const leagues = (e.eval ? e.eval.leagues : []).map((l) => leagueRow(e, l, l.cp === lg)).join('');
     const ball = (BALLS.find((b) => b[0] === e.ball) || BALLS[0])[1];
@@ -1004,6 +1017,15 @@ function renderRoster() {
   }).join('');
 }
 $('#rSearch').addEventListener('input', renderRoster);
+for(const pager of [$('#rPager'),$('#rPagerBottom')])pager.addEventListener('click',e=>{
+  const button=e.target.closest('button[data-step]');if(!button)return;
+  R.page+=Number(button.dataset.step);renderRoster();
+  if(pager.id==='rPagerBottom'){
+    $('#rPager').scrollIntoView({block:'start'});
+    const target=$(`#rPager [data-step="${button.dataset.step}"]`);
+    (target.disabled?$('#rPager button:not(:disabled)'):target)?.focus({preventScroll:true});
+  }
+});
 $('#rSort').addEventListener('change', () => { store.set('faintr.rsort', $('#rSort').value); renderRoster(); });
 $('#rFilter').addEventListener('change', renderRoster);
 $('#rView').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) { R.view = b.dataset.v; store.set('faintr.rview', R.view); renderRoster(); } });
@@ -1889,7 +1911,9 @@ async function loadInfo() {
   showLoader("Couldn't load teams");
   $('#loaderProg').hidden = true;
   $('#loaderNote').textContent = `${e.message} Try reloading the page.`;
+  $('#loaderRetry').hidden=false;
 });
+$('#loaderRetry').addEventListener('click',()=>location.reload());
 
 /* Share a public game setup; keep accounts, nicknames and saved-team notes private. */
 let shareBusy=false;
@@ -1965,8 +1989,9 @@ async function restoreSharedTeam(){
     }
     // Validate the whole setup before changing any slots. Never substitute roster IVs.
     S.weights={...S.info.weights,...team.w};syncFilters();
-    loadIntoGrader(team.m);$('#sharedTeamNote').hidden=false;showView('grade');
+    loadIntoGrader(team.m);$('#sharedTeamError').hidden=true;$('#sharedTeamNote').hidden=false;showView('grade');
     $('#gradeStatus').textContent='Shared team loaded with its moves and IVs. Grade it to check current matchups.';
     // Opening a link stays light: expensive simulations run only when requested.
-  }catch(e){showToast(e.message);}
+  }catch(e){$('#sharedTeamNote').hidden=true;$('#sharedTeamErrorMessage').textContent=e.message;$('#sharedTeamError').hidden=false;showView('grade');}
 }
+$('#sharedRetryBtn').addEventListener('click',()=>location.reload());

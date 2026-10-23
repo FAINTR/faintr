@@ -1,5 +1,7 @@
 # Battle calculation audit — October 23, 2026
 
+Follow-up: additional edge tests found and corrected Morpeko's missing reverse-form transition and the renderer's remaining rounded-score outcome labels. The equal-Attack priority approximation is now explained in the result. See `FOLLOWUP_AUDIT.md` for reproduced cases, primary references and release status.
+
 ## Calculation path
 
 The published game-master data, cup definitions and rankings come from PvPoke. `engine.js` loads the native PvPoke Pokémon, damage, action and battle classes for desktop/tests; `web/src/enginehost.js` loads the same scripts into browser workers. `engine_glue.js` constructs the selected form, applies IVs and a level ceiling, chooses legal moves and finds the highest half-level that fits the league CP limit. `memberlib.js` sets shields, baiting and starting energy, runs the engine, then converts HP, energy and timeline events into the UI result. The browser renders the report and timeline from those outputs.

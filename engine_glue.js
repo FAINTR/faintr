@@ -4,6 +4,16 @@ module.exports = {
   BOOT: `
     function getDefaultMultiBattleSettings(){ return {shields:1,ivs:"original",bait:1,levelCap:50,startHp:1,startEnergy:0,startCooldown:0,optimizeMoveTiming:true,startStatBuffs:[0,0]}; }
     var gm = GameMaster.getInstance(); $.__flush();
+    // Upstream data through 415436c omits Hangry's reverse transition. Supply
+    // only the missing rule; leave future explicit upstream rules untouched.
+    var morpekoFull = gm.getPokemonById('morpeko_full_belly');
+    var morpekoHangry = gm.getPokemonById('morpeko_hangry');
+    if(morpekoFull && morpekoHangry && !morpekoHangry.formChange &&
+       morpekoFull.formChange && morpekoFull.formChange.type === 'toggle' &&
+       morpekoFull.formChange.trigger === 'charged_move' &&
+       morpekoFull.formChange.alternativeFormId === 'morpeko_hangry'){
+      morpekoHangry.formChange = Object.assign({}, morpekoFull.formChange, {alternativeFormId:'morpeko_full_belly'});
+    }
     globalThis.__gm = gm;
   `,
   HELPERS: `

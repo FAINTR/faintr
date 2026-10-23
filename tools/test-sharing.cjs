@@ -57,6 +57,19 @@ for(const invalid of [{...setup,f:'<script>'},{...setup,m:[members[0],members[0]
    r=await worker.fetch(new Request(shortUrl+'/image.png'),env,ctx);assert.equal(r.status,200);
    assert.equal(r.headers.get('Content-Type'),'image/png');assert.equal(Buffer.from(await r.arrayBuffer()).readUInt32BE(16),1200);
    r=await worker.fetch(new Request('https://faintr.com/s/000000000000'),env,ctx);assert.equal(r.status,404);
+   assert((await r.text()).includes('Browse current teams'));
+   const lookupFetch=globalThis.fetch;
+   try{
+     globalThis.fetch=async()=>{throw Error('Synthetic offline failure');};
+     r=await worker.fetch(new Request(shortUrl+'?private=never-echo-this'),env,ctx);assert.equal(r.status,503);
+     const unavailable=await r.text();assert(unavailable.includes('Try this link again'));assert(!unavailable.includes('never-echo-this'));assert.equal(r.headers.get('Cache-Control'),'no-store');
+     r=await worker.fetch(new Request(shortUrl,{method:'HEAD'}),env,ctx);assert.equal(r.status,503);assert.equal((await r.text()).length,0);
+     globalThis.fetch=async()=>new Response('invalid json');
+     r=await worker.fetch(new Request(shortUrl),env,ctx);assert.equal(r.status,503);assert((await r.text()).includes('Try this link again'));
+   }finally{globalThis.fetch=lookupFetch;}
+   r=await worker.fetch(new Request(shortUrl),{...env,ASSETS:{fetch:async()=>{throw Error('Synthetic asset failure');}}},ctx);assert.equal(r.status,503);assert((await r.text()).includes('Browse current teams'));
+   const interrupted=new ReadableStream({start(controller){controller.error(Error('Synthetic interrupted HTML'));}});
+   r=await worker.fetch(new Request(shortUrl),{...env,ASSETS:{fetch:async()=>new Response(interrupted)}},ctx);assert.equal(r.status,503);assert((await r.text()).includes('Try this link again'));
    r=await worker.fetch(create({...setup,m:[]}),env,ctx);assert.equal(r.status,400);
    r=await worker.fetch(new Request('https://faintr.com/share/create',{method:'POST',headers:{'Content-Type':'application/json',Origin:'https://evil.invalid'},body:JSON.stringify(setup)}),env,ctx);assert.equal(r.status,403);
    r=await worker.fetch(new Request('https://faintr.com/share/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({padding:'x'.repeat(5000)})}),env,ctx);assert.equal(r.status,413);

@@ -225,6 +225,7 @@ async function assemble(src, version, built, formats) {
   for (const f of pvFiles) { const p = path.join(src, f); if (fs.existsSync(p)) publish('pvpoke/' + f, fs.readFileSync(p)); }
   const provenance = { provider: 'PvPoke', repository: 'https://github.com/pvpoke/pvpoke',
     revision: readJ(path.join(src, '.version.json'), {}).sha || null, version, license: 'MIT',
+    faintrEngine: { bridgeSha256: sha(fs.readFileSync(path.join(ROOT,'engine_glue.js'))), compatibilityRules: ['Supply the missing Morpeko Hangry-to-Full-Belly charged-attack transition only when upstream data omits it.'] },
     licenseSha256: sha(sourceLicense), files: [...pvFiles].filter(f => fs.existsSync(path.join(src, f))).sort().map(f => ({ path: f, sha256: sha(fs.readFileSync(path.join(src, f))) })),
     scope: 'Software, numerical game data, rankings and cup definitions; not a grant of third-party trademark or game-content rights.' };
   fs.writeFileSync(path.join(tmp, 'source-provenance.json'), JSON.stringify(provenance, null, 2));

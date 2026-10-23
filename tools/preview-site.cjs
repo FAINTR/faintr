@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '../site');
 const types = {'.html':'text/html', '.js':'text/javascript', '.json':'application/json', '.css':'text/css', '.png':'image/png', '.svg':'image/svg+xml', '.woff2':'font/woff2'};
-http.createServer((req, res) => {
+function previewServer(port=4176){return http.createServer((req, res) => {
   if (!['GET','HEAD'].includes(req.method)) { res.writeHead(405).end(); return; }
   let pathname;
   try { pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname); } catch { res.writeHead(400).end(); return; }
@@ -15,4 +15,6 @@ http.createServer((req, res) => {
   if (!fs.existsSync(file) || !fs.statSync(file).isFile()) { res.writeHead(404).end(); return; }
   res.writeHead(200, {'Content-Type': types[path.extname(file)] || 'application/octet-stream', 'Cache-Control':'no-store'});
   if (req.method === 'HEAD') res.end(); else fs.createReadStream(file).pipe(res);
-}).listen(4176, '127.0.0.1', () => console.log('Built-site preview ready on 127.0.0.1:4176'));
+}).listen(port, '127.0.0.1');}
+module.exports={previewServer};
+if(require.main===module)previewServer().on('listening',()=>console.log('Built-site preview ready on 127.0.0.1:4176'));
