@@ -4,7 +4,7 @@
 
 The published game-master data, cup definitions and rankings come from PvPoke. `engine.js` loads the native PvPoke Pokémon, damage, action and battle classes for desktop/tests; `web/src/enginehost.js` loads the same scripts into browser workers. `engine_glue.js` constructs the selected form, applies IVs and a level ceiling, chooses legal moves and finds the highest half-level that fits the league CP limit. `memberlib.js` sets shields, baiting and starting energy, runs the engine, then converts HP, energy and timeline events into the UI result. The browser renders the report and timeline from those outputs.
 
-The local audit fixture uses PvPoke version `bdbb22c_2026-10-16`. Production rebuilds can use a newer upstream version, so regression gates run against the build's source too.
+The local audit fixture uses PvPoke version `bdbb22c_2026-10-16`. The production release rebuilt all five currently published formats against `415436c_2026-10-21`; its mechanics/regression gate also passed against that newer build source. Live WebKit independently restored and graded an existing public shared team successfully under the production security policy. These checks do not independently establish every upstream mechanic.
 
 ## Confirmed errors fixed in application code
 
