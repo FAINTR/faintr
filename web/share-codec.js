@@ -5,7 +5,7 @@
   function clean(value) {
     if (!value || value.v !== 1 || !/^[a-z0-9-]{1,64}$/.test(value.f) || !Array.isArray(value.m) || value.m.length !== 3) fail();
     const m = value.m.map(p => {
-      if (!p || !id.test(p.id) || !Array.isArray(p.moveset) || p.moveset.length < 2 || p.moveset.length > 3 || p.moveset.some(x => typeof x !== 'string' || !move.test(x))) fail();
+      if (!p || !id.test(p.id) || !Array.isArray(p.moveset) || p.moveset.length < 2 || p.moveset.length > 4 || p.moveset.some(x => typeof x !== 'string' || !move.test(x))) fail();
       const ivs = p.ivs == null ? null : { atk: p.ivs.atk, def: p.ivs.def, hp: p.ivs.hp };
       if (ivs && Object.values(ivs).some(x => !Number.isInteger(x) || x < 0 || x > 15)) fail();
       const levelCap = p.levelCap == null ? 50 : p.levelCap;

@@ -31,7 +31,7 @@ function describe(team) {
   if (typeof format !== 'string' || !Object.hasOwn(metadata.formats,team.f)) throw new Error('Unknown league.');
   return {format, members:team.m.map(m=>{
     const p=metadata.pokemon[m.id];
-    if (!p || m.moveset.some((mv,i)=>!(i===0?p.fast:p.charged).includes(mv))) throw new Error('Unknown Pokemon or move.');
+    if (!p || m.moveset.some((mv,i)=>!(i===0?p.fast:i===3?p.extra||[]:p.charged).includes(mv))) throw new Error('Unknown Pokemon or move.');
     return {...m,name:p.name,types:p.types,moves:m.moveset.map(k=>metadata.moves[k]||k.replaceAll('_',' '))};
   })};
 }

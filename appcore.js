@@ -13,6 +13,7 @@ const { describe, query, tierCuts } = require('./teamdata');
 const { Scorer, PERMS } = require('./scoring');
 const { buildReport, gradesFor } = require('./report');
 const { upgradeCandidates } = require('./viptools');
+const rosterLeagues = require('./ui/roster-leagues');
 
 const DEFAULT_F = 'all-1500';
 const IV_FLOORS = [0, 1, 2, 3, 4, 5, 10, 12];
@@ -49,6 +50,8 @@ function createCore(env) {
     const p = (async () => {
       const F = formatDef(key);
       const catalog = ev(`pokemonCatalog(${Fjs(F)})`);
+      const extraMoves=ev(`Object.fromEntries(gm.data.pokemon.filter(p=>p.extraChargedMoves).map(p=>[p.speciesId,p.extraChargedMoves.map(id=>[id,gm.getMoveById(id).name])]))`);
+      catalog.forEach(p=>{p.extra=extraMoves[p.id]||[];});
       const rank = (cat) => ev(`loadRankings(${JSON.stringify(F.cup)}, '${cat}', ${F.cp})`);
       const overallRaw = rank('overall').filter((r) => r.speciesId.indexOf('_xs') === -1);
       const leads = rank('leads').filter((r) => r.speciesId.indexOf('_xs') === -1).map((r) => ({ id: r.speciesId }));
@@ -81,6 +84,10 @@ function createCore(env) {
     const p = st.catalogById.get(mem.id);
     if (!p) throw err(`${(fullCat || []).find((c) => c.id === mem.id)?.name || mem.id} isn't eligible for ${st.F.title}.`, 422);
     const moveset = mem.moveset && mem.moveset.length ? mem.moveset : p.rec;
+    if (!Array.isArray(moveset) || moveset.length<2 || moveset.length>4 ||
+        !p.fast.some(([id])=>id===moveset[0]) || moveset.slice(1).some((move,i)=>!(i===2?p.extra:p.charged).some(([id])=>id===move))) {
+      throw err(`${p.name} has a move that is no longer available. Edit its Roster entry or choose its moves again.`,422);
+    }
     const cap = [40, 41, 50, 51].includes(+mem.levelCap) ? +mem.levelCap : 50;
     return { id: mem.id, moveset, ivs: normIVs(mem.ivs), levelCap: cap };
   }
@@ -222,7 +229,7 @@ function createCore(env) {
     if (!opp.length) throw err(`Pick at least one opponent that's eligible for ${st.F.title}.`, 400);
     let cands = [];
     if (source === 'roster') {
-      const roster = (await env.storage.rosterAll()).filter((e) => st.catalogById.has(e.id));
+      const roster = (await env.storage.rosterAll()).filter((e) => st.catalogById.has(e.id) && rosterLeagues.usable(e, st.F.cp));
       if (!roster.length) throw err(`Nothing in your Roster is eligible for ${st.F.title} yet.`, 400);
       // Only battle the chosen opponents: a few dozen sims per Pokemon instead of the whole league
       cands = await Promise.all(roster.map(async (e) => {
@@ -276,13 +283,14 @@ function createCore(env) {
     const ivs = normIVs(body.ivs || { atk: 0, def: 0, hp: 0 });
     const cp = body.cp ? Math.max(10, Math.min(9999, parseInt(body.cp, 10))) : null;
     const levelCap = +body.levelCap === 51 ? 51 : 50;
-    const moveset = (Array.isArray(body.moveset) ? body.moveset : []).filter((m) => typeof m === 'string').slice(0, 3);
+    const moveset = (Array.isArray(body.moveset) ? body.moveset : []).filter((m) => typeof m === 'string').slice(0, 4);
     const ball = ['poke', 'great', 'ultra', 'master', 'premier', 'other'].includes(body.ball) ? body.ball : 'poke';
     const evalRes = await env.pool.run('rosterEval', sp.id, ivs, cp, levelCap);
     return {
       uid: old ? old.uid : `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
       id: sp.id, name: sp.name, types: sp.types, dex: sp.dex, nickname: String(body.nickname || '').slice(0, 24),
       moveset, ivs, cp, levelCap, shiny: !!body.shiny, ball,
+      leagues: rosterLeagues.normalize(body.leagues === undefined && old ? old.leagues : body.leagues),
       notes: String(body.notes || '').slice(0, 80), pinned: !!body.pinned,
       added: old ? old.added : new Date().toISOString(), eval: evalRes,
     };
@@ -409,7 +417,7 @@ function createCore(env) {
     if (method === 'GET') {
       if (p === '/api/vip/upgrades') {
         const st = await builtState(q.f);
-        const roster = await env.storage.rosterAll();
+        const roster = (await env.storage.rosterAll()).filter(e=>rosterLeagues.usable(e,st.F.cp));
         const { ready, candidates } = upgradeCandidates(roster, st.matrix.statics, st.catalog, st.F.cp);
         const best = (ids, include) => query(st.D, { owned: ids, include: include ? [include] : [], limit: 1 }).teams[0] || null;
         const baseline = best(ready);
@@ -430,7 +438,7 @@ function createCore(env) {
         const st = await fstate(q.f);
         return { key: st.F.key, title: st.F.title, cp: st.F.cp, built: !!st.D, nTeams: st.D ? st.D.n : null, pvpoke: st.D ? st.D.info.pvpoke : null,
           pool: st.D ? st.matrix.statics.map((s) => ({ id: s.id, name: s.name, types: s.types })) : [], cuts: st.D ? tierCuts(st.D) : null, bulkGoal: st.D ? st.D.C.bulkGoal : null,
-          catalog: st.catalog.map((c) => ({ id: c.id, name: c.name, types: c.types, rank: c.rank, fast: c.fast, charged: c.charged, rec: c.rec })),
+          catalog: st.catalog.map((c) => ({ id: c.id, name: c.name, types: c.types, rank: c.rank, fast: c.fast, charged: c.charged, extra:c.extra, rec: c.rec })),
           anti: st.D && st.D.anti ? { field: st.D.anti.field.length, verified: st.D.anti.verified.size, fieldTeams: fieldNames(st) } : null,
           build: env.buildStatus(st.F.key) || null };
       }

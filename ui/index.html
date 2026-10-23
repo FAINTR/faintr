@@ -337,6 +337,8 @@
           <label>CP<input type="number" min="10" max="9999" id="rfCp" placeholder="1500"></label>
         </div>
         <div class="rchecks"><label class="check"><input type="checkbox" id="rfShiny"> Shiny</label><label class="check"><input type="checkbox" id="rfBuddy"> Best buddy (level 51)</label><label class="check"><input type="checkbox" id="rfPin"> Pin to top</label></div>
+        <fieldset class="rchecks" id="rfLeagues"><legend>Use in these leagues</legend><label class="check"><input type="checkbox" value="500">Little</label><label class="check"><input type="checkbox" value="1500">Great</label><label class="check"><input type="checkbox" value="2500">Ultra</label><label class="check"><input type="checkbox" value="10000">Master</label></fieldset>
+        <p class="hint">Cups use their CP league. Uncheck leagues you don’t plan to build this Pokémon for. Pokémon already over a league’s CP cap are excluded automatically.</p>
         <label class="field">Caught in</label>
         <div class="ballpick" id="rfBall" role="radiogroup" aria-label="Ball it was caught in"></div>
       </div>
@@ -410,6 +412,7 @@
   <p class="note">Anyone with the link can see these Pokémon, moves, IVs and settings. Only that public setup is stored for the short link. Your account, private roster and notes stay private. Link previews depend on the app you share to.</p>
 </dialog>
 <!--WEB-SCRIPTS-->
+<script src="/static/roster-leagues.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

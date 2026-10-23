@@ -129,6 +129,8 @@ jobs:
         run: |
           node tools/test-sharing.cjs
           node --test tools/operations-alerts.test.cjs
+          node --test tools/grading-roster.test.cjs
+          node tools/reproduce-grading.cjs
 
       - name: Install release-check browsers
         if: steps.gate.outputs.skip != 'true'

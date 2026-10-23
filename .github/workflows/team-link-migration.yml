@@ -1,0 +1,17 @@
+name: Fix Mega team link validation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/postgres-client
+      - name: Allow the complete Mega moveset in public links
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: /usr/lib/postgresql/17/bin/psql "$DB" -X -v ON_ERROR_STOP=1 --file=supabase/migrations/007_mega_team_links.sql

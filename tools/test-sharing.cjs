@@ -25,6 +25,13 @@ for(const invalid of [{...setup,f:'<script>'},{...setup,m:[members[0],members[0]
  r=await worker.fetch(new Request(url,{method:'POST'}),env,ctx);assert.equal(r.status,405);
  for(const bad of ['not-a-team',codec.encode({...setup,f:'constructor'}),codec.encode({...setup,m:members.map((m,i)=>i?m:{...m,id:'unknown_pokemon'})})]){r=await worker.fetch(new Request('https://faintr.com/share/'+bad),env,ctx);assert.equal(r.status,400);}
  const routes=JSON.parse(fs.readFileSync(path.join(site,'_routes.json')));assert.deepEqual(routes.include,['/share/*','/s/*']);
+ const mega={v:1,f:'mega-10000',m:[
+   {id:'mewtwo_mega_y',moveset:['PSYCHO_CUT','PSYSTRIKE','THUNDERBOLT','FUTURE_SIGHT_PLUS']},
+   {id:'melmetal',moveset:['THUNDER_SHOCK','DOUBLE_IRON_BASH','DYNAMIC_PUNCH']},
+   {id:'palkia_origin',moveset:['DRAGON_BREATH','AQUA_TAIL','SPACIAL_REND']}]};
+ const megaToken=codec.encode(mega);
+ r=await worker.fetch(new Request('https://faintr.com/share/'+megaToken),env,ctx);assert.equal(r.status,200);
+ const megaHtml=await r.text();assert(megaHtml.includes('FUTURE_SIGHT_PLUS'));
  const originalFetch=globalThis.fetch,records=new Map(),shortId='aBcDeF012345';let limited=false;
  env.FAINTR_SHARE_WRITE_KEY='TEST SERVER KEY';env.SHARE_SUPABASE_URL='https://test.supabase.co';env.SHARE_SUPABASE_ANON_KEY='TEST PUBLIC KEY';
  globalThis.fetch=async(input,options)=>{

@@ -17,6 +17,7 @@ const PLAIN = {
   resilience: ['you play the same in 0, 1 and 2 shield games', 'your results swing with shield counts'],
   sharedWeak: ['no common attack type hits two of you', 'one attack type hits two of you super-effectively'],
   pilot: ['your matchups are decisive and easy to play', 'many matchups are close calls that punish misplays'],
+  metaWins: ['your team performs well against the strongest meta teams', 'your team struggles against the strongest meta teams'],
 };
 
 function summarize(grades, comp, threats, members, blind, sharedTypes, tierInfo, title) {
@@ -28,8 +29,8 @@ function summarize(grades, comp, threats, members, blind, sharedTypes, tierInfo,
   const lines = [tierInfo && tierInfo.key !== 'fair'
     ? `${TIER_TEXT[tierInfo.key]}: ${tierInfo.label.toLowerCase()} of every ${title} team (${comp.toFixed(0)} out of 100).`
     : `${TIER_TEXT.fair} (${comp.toFixed(0)} out of 100).`];
-  if (best.length) lines.push(`Strengths: ${best.map((k) => PLAIN[k][0]).join('; ')}.`);
-  if (worst.length) lines.push(`Watch out: ${worst.map((k) => `${PLAIN[k][1]} (${M.GRADES[k].label} ${grades[k].letter})`).join('; ')}.`);
+  if (best.length) lines.push(`Strengths: ${best.map((k) => PLAIN[k]?.[0] || `${M.GRADES[k].label} scores well`).join('; ')}.`);
+  if (worst.length) lines.push(`Watch out: ${worst.map((k) => `${PLAIN[k]?.[1] || `${M.GRADES[k].label} needs attention`} (${M.GRADES[k].label} ${grades[k].letter})`).join('; ')}.`);
   if (threats.length) {
     const t = threats[0];
     const beaten = t.vs.filter((v) => v.avg > 500).length;
@@ -134,4 +135,4 @@ function buildReport({ ctx, F, C, matrix, rows, stats, ivs, ivRows, leads, overa
   };
 }
 
-module.exports = { buildReport, gradesFor };
+module.exports = { buildReport, gradesFor, summarize };

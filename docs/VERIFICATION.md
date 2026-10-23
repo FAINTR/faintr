@@ -74,3 +74,23 @@ Not verifiable from this environment, so test these on a Windows PC: double-clic
 | Meta | Rankings and changes | Yes, per format |
 | My Teams | Saved teams with re-grading | Yes, re-graded after the full update test |
 | Updates | Automatic PvPoke sync | Yes: check, full rebuild, swap and offline paths tested. Live GO Battle League formats are kept built. |
+# Grading and Roster feedback regressions
+
+The report summary now covers every grade, including Meta Wins. The former code
+reproduced both reported `reading '0'` / `reading '1'` failures when that grade was
+chosen as a strength or weakness. `tools/grading-roster.test.cjs` tests both paths
+for every grade. `tools/reproduce-grading.cjs` grades the supplied Garchomp /
+Gyarados / Metagross team with its custom IVs, default IVs, perfect IVs, and again
+with the original IVs in the same engine.
+
+Roster league choices apply to pickers, owned-team searches, substitutions,
+counters and build planning. Untagged entries with known CP default to the nearest
+CP league; unknown CP retains all choices until the trainer sets them. Current CP
+always prevents using a Pokémon above a capped league, even if its checkbox was
+previously selected. Cups inherit their CP league's choice.
+
+Mega Master sharing accepts fast + three charged moves, includes the separate
+extra-move pool in validation, and preserves that move when loading or resharing.
+Migration `007_mega_team_links.sql` updates only the existing public-sharing
+function's moveset length bound. Existing short and legacy links remain supported.
+

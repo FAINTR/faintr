@@ -149,3 +149,43 @@ test('guest account and battle tools dialogs fit without accessing a real accoun
   await expect(page.locator('#authDiscord')).toBeVisible(); await expect(page.locator('#authGoogle')).toBeVisible();
   await page.locator('#authClose').click(); await expect(page.locator('#authDlg')).toBeHidden();
 });
+test('roster CP and league choices govern every team picker',async({page})=>{
+  await page.addInitScript(()=>localStorage.setItem('faintr.web.roster',JSON.stringify([
+    {uid:'master-only',id:'metagross',name:'Metagross',cp:3737,leagues:[10000],ivs:{atk:15,def:14,hp:10},moveset:[]},
+    {uid:'great-only',id:'mimikyu',name:'Mimikyu',cp:1495,leagues:[1500],ivs:{atk:4,def:14,hp:15},moveset:[]},
+    {uid:'both',id:'azumarill',name:'Azumarill',cp:1498,leagues:[1500,2500],ivs:{atk:0,def:15,hp:15},moveset:[]}
+  ])));
+  await loaded(page);
+  await page.locator('#cupSel').selectOption('all-1500');
+  await expect(page.locator('#matched')).toContainText('Great League');
+  await page.getByRole('tab',{name:'Team Grader',exact:true}).click();
+  const roster=page.locator('#slots .fromRoster').first();
+  await expect(roster.locator('option[value="master-only"]')).toHaveCount(0);
+  await expect(roster.locator('option[value="great-only"]')).toHaveCount(1);
+  await page.locator('#leagueSeg button[data-f="all-2500"]').click();
+  await expect(page.locator('#gradeLede')).toContainText('Ultra League');
+  await expect(roster.locator('option[value="great-only"]')).toHaveCount(0);
+  await expect(roster.locator('option[value="both"]')).toHaveCount(1);
+  await page.getByRole('tab',{name:'Roster',exact:true}).click();
+  await page.locator('#rGrid [data-uid="great-only"] [data-roster-league="2500"]').check();
+  await expect(page.locator('#toast')).toContainText('League choices saved');
+  await page.getByRole('tab',{name:'Team Grader',exact:true}).click();
+  await expect(roster.locator('option[value="great-only"]')).toHaveCount(1);
+  await fits(page);
+});
+test('Mega Master shared teams retain the additional charged move when reshared',async({page})=>{
+  const mega={v:1,f:'mega-10000',m:[
+    {id:'mewtwo_mega_y',moveset:['PSYCHO_CUT','PSYSTRIKE','THUNDERBOLT','FUTURE_SIGHT_PLUS']},
+    {id:'melmetal',moveset:['THUNDER_SHOCK','DOUBLE_IRON_BASH','DYNAMIC_PUNCH']},
+    {id:'palkia_origin',moveset:['DRAGON_BREATH','AQUA_TAIL','SPACIAL_REND']}]};
+  let captured;
+  await page.route('**/share/create',async route=>{captured=route.request().postDataJSON();await route.fulfill({json:{path:'/s/aBcDeF012345'}});});
+  await page.goto('/share/'+codec.encode(mega));
+  await expect(page.locator('#loader')).toBeHidden();
+  await expect(page.locator('#sharedTeamNote')).toBeVisible();
+  await expect(page.locator('#slots .slot').first().locator('select[data-m="3"]')).toHaveValue('FUTURE_SIGHT_PLUS');
+  await page.locator('#shareGradeBtn').click();
+  await expect(page.locator('#teamShareDialog')).toBeVisible();
+  expect(captured.m[0].moveset).toEqual(mega.m[0].moveset);
+  await fits(page);
+});

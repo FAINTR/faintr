@@ -38,7 +38,8 @@ async function api(path, body, opts = {}) {
   return j;
 }
 const catalogById = () => (S._cat || (S._cat = new Map(S.fmt.catalog.map((c) => [c.id, c]))));
-const rosterIds = () => new Set(S.roster.map((e) => e.id));
+const rosterFits = e => !!S.fmt && window.FAINTR_ROSTER_LEAGUES.usable(e,S.fmt.cp);
+const rosterIds = () => new Set(S.roster.filter(rosterFits).map((e) => e.id));
 
 /* ---------- shared pieces */
 function card(grades) {
@@ -323,7 +324,7 @@ $('#teams').addEventListener('click', async (e) => {
 });
 // When a team member is in your Roster, grade it with your real IVs and moves
 function withRoster(m) {
-  const own = S.roster.filter((e) => e.id === m.id);
+  const own = S.roster.filter((e) => e.id === m.id && rosterFits(e));
   if (!own.length) return m;
   const lg = S.fmt.cp;
   const best = own.slice().sort((a, b) => rankIn(a, lg) - rankIn(b, lg))[0];
@@ -390,6 +391,7 @@ function monEditor(el, opts = {}) {
     <label class="field">Fast move</label><select data-m="0" disabled></select>
     <label class="field">Charged move 1</label><select data-m="1" disabled></select>
     <label class="field">Charged move 2</label><select data-m="2" disabled></select>
+    <label class="field" data-third-charge hidden>Additional charged move</label><select data-m="3" hidden disabled></select>
     <div class="ivbox"><div class="ivrow">
       <label>Attack<input type="number" min="0" max="15" data-iv="atk" disabled></label>
       <label>Defense<input type="number" min="0" max="15" data-iv="def" disabled></label>
@@ -401,7 +403,7 @@ function monEditor(el, opts = {}) {
   const getIVs = () => ({ atk: +ivIn[0].value, def: +ivIn[1].value, hp: +ivIn[2].value });
   let ivTimer = null, ivSeq = 0;
   function fillRoster() {
-    const elig = S.roster.filter((e) => catalogById().has(e.id));
+    const elig = S.roster.filter((e) => catalogById().has(e.id) && rosterFits(e));
     rsel.innerHTML = `<option value="">${S.roster.length ? (elig.length ? `Roster (${elig.length})` : 'Roster (none fit)') : 'Roster (empty)'}</option>`
       + elig.map((e) => `<option value="${e.uid}">${esc(e.nickname ? `${e.nickname} (${e.name})` : e.name)} · ${e.ivs.atk}/${e.ivs.def}/${e.ivs.hp}${e.cp ? ` · CP ${e.cp}` : ''}</option>`).join('');
     rsel.disabled = !elig.length; rsel.hidden = !!opts.compactEmpty && !elig.length;
@@ -441,6 +443,9 @@ function monEditor(el, opts = {}) {
     const pm = (preset && preset.moveset) || [];
     const mv = [ok(pm[0], p.fast) ? pm[0] : p.rec[0], ok(pm[1], p.charged) ? pm[1] : p.rec[1], pm.length ? (ok(pm[2], p.charged) ? pm[2] : '') : p.rec[2]];
     sels[0].innerHTML = opt(p.fast, mv[0]); sels[1].innerHTML = opt(p.charged, mv[1]); sels[2].innerHTML = opt(p.charged, mv[2], true);
+    const extra=pm.length>3||p.rec.length>3;
+    sels[3].innerHTML=opt(p.extra||[],extra?(pm[3]||p.rec[3]):'',false);
+    sels[3].hidden=!extra;$('[data-third-charge]',el).hidden=!extra;
     [...sels, ...ivIn, cap, ...$$('[data-preset]', el)].forEach((x) => { x.disabled = false; });
     cap.value = String((preset && preset.levelCap) || 50);
     if (preset && preset.ivs) { st.ivMode = 'custom'; ivIn[0].value = preset.ivs.atk; ivIn[1].value = preset.ivs.def; ivIn[2].value = preset.ivs.hp; } else st.ivMode = 'default';
@@ -463,7 +468,7 @@ function monEditor(el, opts = {}) {
     clear() { Object.assign(api_, monEditor(el, opts)); },
     value() {
       if (!st.p) return null;
-      return { id: st.p.id, moveset: sels.map((s) => s.value).filter(Boolean), ivs: st.ivMode === 'default' ? null : getIVs(), levelCap: +cap.value, label: st.label };
+      return { id: st.p.id, moveset: sels.filter(s=>!s.hidden).map((s) => s.value).filter(Boolean), ivs: st.ivMode === 'default' ? null : getIVs(), levelCap: +cap.value, label: st.label };
     },
     // League or cup changed: keep the pick if it's eligible, otherwise clear with a note
     reformat() {
@@ -957,6 +962,7 @@ function renderRoster() {
         <div class="rname"><h4>${esc(nm)}${e.shiny ? ' <span class="shinytag" title="Shiny">Shiny</span>' : ''}</h4><div class="note">${e.nickname ? esc(e.name) + ' ' : ''}${typeDots(e.types)}${counts.get(e.id) > 1 ? ` <span class="dupe" title="You have ${counts.get(e.id)} of these">×${counts.get(e.id)}</span>` : ''}</div></div>
         <div class="rcp"><button type="button" class="pinbtn" data-act="pin" aria-pressed="${!!e.pinned}" title="${e.pinned ? 'Unpin' : 'Pin to top'}">${e.pinned ? 'Pinned' : 'Pin'}</button><span>CP</span><b>${e.cp ? fmt(e.cp) : '—'}</b></div></div>
       <div class="rmeta"><span>IVs <b>${e.ivs.atk}/${e.ivs.def}/${e.ivs.hp}</b></span><span>${esc(ball)}</span>${e.levelCap === 51 ? '<span>Best buddy</span>' : ''}${e.eval && e.eval.currentLevel ? `<span>Level ${e.eval.currentLevel}</span>` : ''}</div>
+      <fieldset class="rchecks roster-league-choices"><legend>Use in</legend>${window.FAINTR_ROSTER_LEAGUES.CAPS.map(cp=>`<label class="check"><input type="checkbox" data-roster-league="${cp}" ${window.FAINTR_ROSTER_LEAGUES.choices(e).includes(cp)?'checked':''} ${e.cp&&cp<10000&&e.cp>cp?'disabled':''}>${LEAGUE_NAME[cp]}</label>`).join('')}</fieldset>
       <div class="rmoves note" title="${esc(moveNames)}">${esc(moveNames)}</div>${third}${e.notes ? `<div class="rnotes">${esc(e.notes)}</div>` : ''}
       <div class="rleagues">${leagues || `<p class="note">${(e.eval && e.eval.evolves && e.eval.evolves.length) ? `${esc(e.name)} isn't used in the standard leagues; see its evolution below.` : 'Not eligible for the standard leagues.'}</p>`}</div>${evolveHint(e, lg)}
       <div class="ract"><button class="btn small" type="button" data-act="grade" title="Put it in the Team Grader">Grade</button><button class="btn small" type="button" data-act="battle" title="1v1 in Matchups">Battle</button><button class="btn small" type="button" data-act="counters" title="Best answers to it">Counters</button><button class="btn small" type="button" data-act="ivs" title="Open in PvP IVs">IVs</button>
@@ -981,13 +987,13 @@ $('#rGrid').addEventListener('click', async (ev) => {
   const preset = { moveset: e.moveset, ivs: e.ivs, levelCap: e.levelCap, label: e.nickname };
   const notHere = () => showToast(`${e.name} isn't eligible for ${title()}. Switch league or cup at the top first.`);
   if (act === 'grade') {
-    if (!p) return notHere();
+    if (!p || !rosterFits(e)) return notHere();
     const have = slots.findIndex((s) => s.value() && s.value().id === e.id);
     const i = have >= 0 ? have : slots.findIndex((s) => !s.value());
     slots[i < 0 ? 2 : i].set(p, preset); showView('grade');
     $('#gradeStatus').textContent = i < 0 ? `Put ${e.nickname || e.name} in the Closer slot.` : '';
   }
-  if (act === 'battle') { if (!p) return notHere(); bs[0].ed.set(p, preset); showView('battle'); setMode('1v1'); }
+  if (act === 'battle') { if (!p || !rosterFits(e)) return notHere(); bs[0].ed.set(p, preset); showView('battle'); setMode('1v1'); }
   if (act === 'counters') { if (!p) return notHere(); CF.opp = [p]; renderChips('opp'); showView('battle'); setMode('counters'); runCounters(); }
   if (act === 'ivs') { openIVs(e.id, e.ivs, capOf(e)); }
   if (act === 'edit') openRosterForm(e);
@@ -1000,6 +1006,14 @@ $('#rGrid').addEventListener('click', async (ev) => {
     await api('/api/roster/delete', { uid: e.uid }, { noF: true }); await loadRoster();
     showToast(`Removed ${e.nickname || e.name}.`, { label: 'Undo', run: async () => { await api('/api/roster/undo', {}, { noF: true }); loadRoster(); } });
   }
+});
+$('#rGrid').addEventListener('change',async ev=>{
+  const box=ev.target.closest('[data-roster-league]');if(!box)return;
+  const card=box.closest('[data-uid]'),entry=S.roster.find(e=>e.uid===card.dataset.uid);
+  const leagues=$$('[data-roster-league]:checked',card).map(input=>+input.dataset.rosterLeague);
+  box.disabled=true;
+  try{await saveRosterPatch(entry,{leagues});showToast('League choices saved.');}
+  catch(error){showToast(error.message);renderRoster();}
 });
 // Save one change to an entry
 async function saveRosterPatch(e, patch) {
@@ -1086,6 +1100,12 @@ async function openRosterForm(e) {
   const full = await fullCatalog();
   RF.uid = e ? e.uid : null; RF.ball = e ? e.ball : 'poke'; RF.p = null;
   $('#rfTitle').textContent = e ? `Edit ${e.nickname || e.name}` : 'Add to Roster';
+  RF.leaguesTouched=false;
+  const chosen=window.FAINTR_ROSTER_LEAGUES.choices(e||{});
+  $$('#rfLeagues input').forEach(box=>{
+    box.disabled=!!(e&&e.cp&&+box.value<10000&&e.cp>+box.value);
+    box.checked=!box.disabled&&chosen.includes(+box.value);
+  });
   $('#rfNick').value = e ? e.nickname || '' : '';
   $('#rfAtk').value = e ? e.ivs.atk : 0; $('#rfDef').value = e ? e.ivs.def : 15; $('#rfHp').value = e ? e.ivs.hp : 15;
   $('#rfCp').value = e && e.cp ? e.cp : ''; $('#rfShiny').checked = !!(e && e.shiny); $('#rfBuddy').checked = !!(e && e.levelCap === 51);
@@ -1100,11 +1120,20 @@ async function openRosterForm(e) {
 window.openRosterForm = openRosterForm;
 $('#rAdd').addEventListener('click', () => openRosterForm());
 $('#rfCancel').addEventListener('click', () => $('#rDlg').close());
+$('#rfLeagues').addEventListener('change',()=>{RF.leaguesTouched=true;});
+$('#rfCp').addEventListener('input',()=>{
+  const cp=+$('#rfCp').value||null;
+  $$('#rfLeagues input').forEach(box=>{box.disabled=!!(cp&&+box.value<10000&&cp>+box.value);if(box.disabled)box.checked=false;});
+  if(RF.leaguesTouched)return;
+  const chosen=window.FAINTR_ROSTER_LEAGUES.choices({cp});
+  $$('#rfLeagues input').forEach(box=>box.checked=chosen.includes(+box.value));
+});
 $('#rfSave').addEventListener('click', async () => {
   if (!RF.p) { $('#rfStatus').textContent = 'Pick a Pokémon first.'; return; }
   const body = { uid: RF.uid, id: RF.p.id, nickname: $('#rfNick').value.trim(), ivs: { atk: +$('#rfAtk').value, def: +$('#rfDef').value, hp: +$('#rfHp').value },
     cp: $('#rfCp').value ? +$('#rfCp').value : null, levelCap: $('#rfBuddy').checked ? 51 : 50, shiny: $('#rfShiny').checked, ball: RF.ball,
     notes: $('#rfNotes').value.trim(), pinned: $('#rfPin').checked,
+    leagues: $$('#rfLeagues input:checked').map(box=>+box.value),
     moveset: $('#rfFast').value && $('#rfC1').value ? [$('#rfFast').value, $('#rfC1').value, $('#rfC2').value].filter(Boolean) : [] };
   $('#rfStatus').innerHTML = '<span class="spin"></span> Saving';
   try { await api('/api/roster', body, { noF: true }); $('#rDlg').close(); await loadRoster(); showToast(RF.uid ? 'Saved.' : `Added ${RF.p.name} to your Roster.`); } catch (e) { $('#rfStatus').textContent = e.message; }
@@ -1825,7 +1854,7 @@ async function restoreSharedTeam(){
     if(team.f!==S.f)await setFormat(team.f);
     for(const m of team.m){
       const p=catalogById().get(m.id);
-      if(!p || m.moveset.some((move,i)=>!(i===0?p.fast:p.charged).some(([id])=>id===move)))throw Error('A shared Pokemon or move is no longer available in this league.');
+      if(!p || m.moveset.some((move,i)=>!(i===0?p.fast:i===3?p.extra:p.charged).some(([id])=>id===move)))throw Error('A shared Pokemon or move is no longer available in this league.');
     }
     // Validate the whole setup before changing any slots. Never substitute roster IVs.
     S.weights={...S.info.weights,...team.w};syncFilters();

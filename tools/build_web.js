@@ -323,7 +323,7 @@ async function assemble(src, version, built, formats) {
   const shareGm=readJ(path.join(src,'data/gamemaster.json'));
   const pokemon={};
   for(const p of shareGm.pokemon){
-    const value={name:p.speciesName,types:p.types,fast:p.fastMoves||[],charged:p.chargedMoves||[]};
+    const value={name:p.speciesName,types:p.types,fast:p.fastMoves||[],charged:p.chargedMoves||[],extra:p.extraChargedMoves||[]};
     pokemon[p.speciesId]=value;
     if(p.shadow){pokemon[p.speciesId+'_shadow']={...value,name:p.speciesName+' (Shadow)',charged:[...value.charged,'FRUSTRATION','RETURN']};}
   }
