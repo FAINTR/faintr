@@ -416,14 +416,20 @@ aside.filters { top: 128px; max-height: calc(100vh - 146px); }
 .crest.lg svg { width: 62px; height: 62px; }
 .crest.lg.dual svg { width: 54px; height: 54px; }
 .crest img { min-width: 58px; }
-.rname h4 { margin: 0; font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rname h4 { margin: 0; font-size: 17px; white-space: normal; overflow-wrap: anywhere; }
 .shinytag { font-size: 11px; font-weight: 600; color: var(--gA-ink); background: var(--fr-amber); border-radius: 4px; padding: 1px 5px; vertical-align: 2px; }
 .rcp { text-align: right; line-height: 1.1; }
 .rcp span { display: block; font-size: 11px; color: var(--muted); }
 .rcp b { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .rmeta { display: flex; gap: 6px; flex-wrap: wrap; font-size: 13px; }
 .rmeta span { background: var(--raised); border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; }
-.rmoves { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rmoves { white-space: normal; overflow-wrap: anywhere; }
+@media(max-width:600px) {
+  .rtop { grid-template-columns:minmax(0,1fr) auto; grid-template-areas:"name name" "crest cp"; }
+  .rtop .rname { grid-area:name; }
+  .rtop > .crest { grid-area:crest; justify-self:start; }
+  .rtop .rcp { grid-area:cp; }
+}
 .rleagues { border-top: 1px solid var(--line); padding-top: 6px; }
 .lrow { display: grid; grid-template-columns: 52px 112px 50px 1fr; gap: 8px; align-items: center; font-size: 13px; padding: 3px 4px; border-radius: 6px; }
 .lrow.sel { background: var(--raised); }

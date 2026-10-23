@@ -222,13 +222,14 @@ test('roster editing persists locally and the dialog fits',async({page},info)=>{
 test('a 2,000-entry roster pages, searches, edits and exports every entry',async({page})=>{
   await page.addInitScript(()=>{
     if(localStorage.getItem('faintr.web.roster'))return;
-    const roster=Array.from({length:2000},(_,i)=>({uid:'stress-'+i,id:'azumarill',name:'Azumarill',nickname:'Synthetic '+String(i).padStart(4,'0'),types:['water','fairy'],dex:184,ivs:{atk:0,def:15,hp:15},cp:1498,levelCap:50,leagues:[1500],moveset:['BUBBLE','ICE_BEAM','PLAY_ROUGH'],added:'2026-10-23',eval:{v:2,leagues:[{cp:1500,level:45,maxCp:1498,rank:20,count:4096,pctOfBest:99,status:'ready'}],evolves:[]}}));
+    const roster=Array.from({length:2000},(_,i)=>({uid:'stress-'+i,id:'azumarill',name:'Azumarill',nickname:i===0?'Synthetic 0000 with a very long nickname':'Synthetic '+String(i).padStart(4,'0'),types:['water','fairy'],dex:184,ivs:{atk:0,def:15,hp:15},cp:1498,levelCap:50,leagues:[1500],moveset:['BUBBLE','ICE_BEAM','PLAY_ROUGH'],added:'2026-10-23',eval:{v:2,leagues:[{cp:1500,level:45,maxCp:1498,rank:20,count:4096,pctOfBest:99,status:'ready'}],evolves:[]}}));
     localStorage.setItem('faintr.web.roster',JSON.stringify(roster));
   });
   await loaded(page);await page.getByRole('tab',{name:'Roster',exact:true}).click();
   await expect(page.locator('#rNote')).toContainText('2000 Pokémon saved');
   await expect(page.locator('#rGrid [data-uid]')).toHaveCount(50);
   await expect(page.locator('#rPager')).toContainText('Page 1 of 40');await fits(page);
+  expect(await page.locator('#rGrid .rname h4').first().evaluate(e=>e.scrollWidth<=e.clientWidth+1&&e.scrollHeight<=e.clientHeight+1)).toBe(true);
   await page.locator('#rPager').getByRole('button',{name:'Next',exact:true}).click();
   await expect(page.locator('#rPager')).toContainText('Page 2 of 40');await expect(page.locator('#rGrid [data-uid="stress-50"]')).toBeVisible();
   await page.locator('#rView button[data-v="list"]').click();
