@@ -1,49 +1,52 @@
-# FAINTR audit working record
+# FAINTR audit completion record
 
-Updated October 23, 2026, 15:04 UTC. This is a continuation record, not a claim that every check or deployment is complete.
+Updated October 23, 2026. The reviewed application fixes are published and verified. This records the bounded audit results; it is not a guarantee that every device, matchup or security scenario has been exhaustively tested.
 
-## Release state
+## Published releases
 
-- Previously deployed baseline: `aa89d56768ba75a0f449c5113713750865e031ae`.
-- Main audit release committed/pushed: `24f9b5b1588421abe67a33c5f368888ceaeafbb8` (46 files). Workflow `39971805865` succeeded and published at15:07UTC, with5formats freshly rebuilt,72Node regressions and100browser checks passed. Live smoke verification remains pending.
-- Follow-up change: disposable database CI, proposed analytics SQL syntax correction, approved report-limit migration, and tested admin-update fallback to GitHub. Commit/publication pending.
-- No customer roster, backup contents, credentials or account deletion was used for testing.
+- Baseline before audit: `aa89d56768ba75a0f449c5113713750865e031ae`.
+- Main application fixes: `24f9b5b1588421abe67a33c5f368888ceaeafbb8`, release39971805865 succeeded. Five formats were rebuilt against PvPoke `415436c_2026-10-21`: Great, Ultra, Master, Master Mega and Fantasy Cup.
+- Database regression CI and admin-update fallback: `938572efbb8137f0bb6472081401469f57e94452`, release39975947216 and database39975947209 succeeded.
+- Corrected the existing What's New description to match visible grade badges: `8c603d929069c702eb70cc04719b7fb525b3de9f`, release39978029657 succeeded. Deployment: https://8dae74aa.faintr.pages.dev and https://faintr.com.
+- Final public-page verification at18:05UTC confirmed live app source matches the tested source, free access, optional analytics off, canonical tags, public pages, robots, sitemap and correct404 handling. Existing short link returned200.
 
-## Owner decisions and production change
+## Owner decisions
 
-- Owner explicitly approved report spam-limit fix. Applied transactionally in Supabase October23; read-back: `serialized_report_limit=true`, `active_report_trigger=true`. Existing limits, reports and roster policies intact. SQL: `supabase/migrations/008_report_serialization.sql`. Local screenshot: sibling `output/bug-report-fix-verified.png`.
-- Owner explicitly chose **keep optional analytics off pending review**. Do not enable its flags, provision schema/write credential/Cron job, or publish draft privacy language. Existing Cloudflare Web Analytics remains active.
-- Optional `trigger-update` is absent in production with no GitHub credential. Do not provision new access. UI fallback offers existing GitHub workflow instead of dead controls; scheduled updates remain independent.
+- All website tools are free; there is no VIP. Do not reintroduce monetization. The owner reaffirmed this after a review of leftover payment code. The unpublished Stripe-related draft was discarded; no billing UI, SQL deletion guard or billing endpoint change was deployed.
+- Optional product analytics stays OFF pending owner review. No new schema, credential, Cron job or draft privacy wording was provisioned/published. Existing Cloudflare Web Analytics remains active.
+- The owner specifically approved the bug-report serialization fix. Applied transactionally to Supabase; read-back confirmed the lock and active trigger. Existing reports and roster permissions preserved. Migration: `supabase/migrations/008_report_serialization.sql`. Local proof: sibling `output/bug-report-fix-verified.png`.
+- The optional in-site admin update endpoint remains unprovisioned. A tested link to existing GitHub update controls replaces unavailable controls. Scheduled updates remain independent.
+- No getting-started guide and no new bug-fix What's New announcement. Existing roster-checkbox explanation/scavenger credit remains. The obsolete hidden-grade description was corrected in place.
 
-## Inspection and fixes completed
+## Completed review and fixes
 
-Detailed severity/reproduction/fix reports: `docs/WEBSITE_AUDIT.md`, `SECURITY_AUDIT.md`, `ROSTER_AUDIT.md`, `BATTLE_AUDIT.md`, `PERFORMANCE_AUDIT.md`, `ANALYTICS_PLAN.md`.
+Reports:
+- `docs/WEBSITE_AUDIT.md`: severity, impact, reproduction, fixes, product/mobile/architecture review and unresolved observations.
+- `docs/SECURITY_AUDIT.md`: actual stack/deployment checks, findings, approved production change and remaining limits.
+- `docs/ROSTER_AUDIT.md`: exact local/cloud persistence, account boundaries, import/export, copies/forms/moves/leagues, conflicts and failure recovery.
+- `docs/BATTLE_AUDIT.md`: calculation path, reference comparisons, verified fixes and unsupported/unproven mechanics.
+- `docs/PERFORMANCE_AUDIT.md`: baseline, measured changes, costs and monitoring instructions.
+- `docs/ANALYTICS_PLAN.md`: existing analytics, distinct metric/event definitions, funnels, consent, disabled implementation and activation review.
 
-- Account input/autofill colors, sign-out errors, immediate account-boundary cleanup, stale operation/reply rejection.
-- Worker startup/runtime failure recovery, lazy pool, retryable load errors.
-- Roster field-specific refresh/no resurrection, stale edit rejection, replay-safe imports, validation, retained pending rows/download, save/export/delete/undo feedback, retention notice. No storage migration or existing-data loss.
-- Default-IV/Mega level ceilings, minimum/fixed HP, neutral battle reference stats, exact timeout winner before rating rounding, shared species/one-Mega legality.
-- 320px report overflow, readable scrolling tables/charts, 44px controls, bounded dialogs, keyboard/listbox/tab relationships, Safari touch picking. Grade badge sizes/visibility, full moves/names and sharing preserved.
-- Stable initial controls/layout; unnecessary matrices/eager engines removed; current-input provenance and standard-league rebuilds.
-- Canonical/social metadata, sitemap/robots, helpful404, stale VIP privacy wording. All tools free, no getting-started guide, no bug-fix What's New entry. Earlier scavenger credit remains.
-- Desktop source Host/Origin/JSON protections and bounded bodies. Previously downloaded executables are not retroactively rebuilt.
-- Disabled optional consent-first analytics, no vendor SDK. SQL/retention/privacy proposals remain unprovisioned.
+Application fixes include readable account/autofill text; worker failure recovery and lazy initialization; immediate account-boundary cleanup; stale-response rejection; roster metadata/deletion preservation; conflicting-edit rejection; replay-safe validated imports with retained failures; accurate save/export/delete/undo feedback; level-cap/Mega/minimum-HP fixes; neutral damage reference stats; exact timeout winner before rounding; shared team legality; responsive reports/tables/charts/dialogs; keyboard/touch controls; stable loading layout; current-data build provenance; and public-page SEO metadata. Existing badges, full names/moves, sharing, free tools and visual identity are preserved. No storage architecture migration or existing-user-data migration occurred.
 
-## Verification
+## Verification completed
 
-- 72 Node cases passed:21audit,13battle,9analytics,23grading/roster,6operations. Sharing and reported-team reproduction passed.
-- Battle suite includes72native-engine/wrapper matchup comparisons plus independent arithmetic, energy/shields, buffs, fainting, timeout, level caps, HP and legality. Engine parity does not independently prove every game mechanic.
-- Disposable PostgreSQL suite:8tests passed. Actual migrations with synthetic accounts; anonymous denial, owner isolation/export/update/delete, protected admin flag, report limits/server stamps, intentional share privacy, analytics proposal credential/validation/idempotency/retention and deletion cascades. Dedicated CI has no production credentials.
-- Earlier90browser checks passed. Later unpublished Safari touch regression fixed and30focused cases passed;5admin-fallback checks passed. Final105-case suite PASSED in7.7minutes across desktop,320/375/430px and iPhone WebKit. Five focused admin-dialog cases also passed after the final explanatory-text change.
-- Physical iOS keyboard/rotation/screen readers and real two-device JWT flow not verified. Disposable SQL emulates identity functions; no real parallel PostgreSQL connection/load test.
-- Live metadata: RLS on5private tables; anonSELECT absent;4owner roster policies; no authenticated admin-flag UPDATE. Anonymous zero-row reads401. No customer rows requested.
-- Live public headers: CSP/frame denial/nosniff/referrer policy. Required unsafe-eval remains; HSTS/Permissions-Policy absent in sampled responses. No working XSS found; not security certification.
-- npm audit:0known vulnerabilities/166dependencies. Limited current/history credential scans:0matches, not exhaustive.
-- Backup39869002881(Oct22): encrypted backup and isolated recovery jobs success. No production restore/content access.
+- 105 browser release cases passed across desktop1440px, phone320/375/430px and iPhone WebKit. Latest production gate passed in5.2minutes. Earlier full local suite passed in7.7minutes. A Safari touch issue found in an unpublished build was corrected and retested before release.
+- 72 Node regression cases passed:21audit,13battle,9analytics,23grading/roster,6operations. Sharing and reported-team reproduction checks also passed.
+- Eight disposable PostgreSQL tests passed locally and on GitHub: actual migration SQL with synthetic identities, anonymous denials, owner-only reads/exports/updates/deletes, protected admin flags, report limits/server stamps, intentional public-sharing privacy, proposed analytics SQL validation/authentication/idempotency/retention and isolated deletion cascades. No production credentials or customer data used.
+- Battle suite includes72native-engine/wrapper comparisons, plus independent arithmetic, energy/shields, buffs, fainting, timeout, level caps, HP and legality. Both local pinned and newer production source passed. Engine parity is not independent proof of all mechanics.
+- Live Chromium at1440/320/375/430px: nonzero scores, ten visible grade badges, unclipped names/moves, no page-wide overflow, account-field contrast about10.49:1, restored and graded public sharing. Live WebKit also restored and graded it under production CSP.
+- One earlier live share-panel load timed out without captured failure details. Focused diagnostic, five consecutive fresh-browser runs and later full smoke check succeeded. Cause unconfirmed; do not call it a proven defect or a fixed issue. See `output/share-reliability.json`, `deployed-smoke.json`, `deployed-smoke-webkit.json` in sibling workspace.
+- Live read-only metadata: RLS enabled on five private tables; anonymous SELECT absent; all four roster operations owner-scoped; authenticated users cannot update admin flag. Anonymous zero-row requests returned401. No customer rows inspected.
+- Live headers included CSP/frame denial/nosniff/referrer policy. Required unsafe-eval remains; sampled responses lacked HSTS/Permissions-Policy. No working XSS found. These are bounded checks, not security certification.
+- Online npm audit: zero known vulnerabilities across166dependencies. Limited current/history credential scans found no matches; no secrets printed, no exhaustive secret-history certification.
+- Backup39869002881: encrypted backup and isolated recovery jobs succeeded. No production restore or backup-content access.
+- Discord sidebar role grouping was inspected: FOUNDER, CEO and Helper display grouping enabled; FOUNDER visible in member list. Offline members remain under Offline. No role permissions changed.
 
 ## Performance evidence
 
-Same local cold-load conditions, uncompressed local delivery including workers. Phone375px,4xCPU,150ms latency,200KB/s. One sample per condition, not field CWV/INP.
+Same local cold-load profile, uncompressed local delivery including workers. Phone375px,4xCPU,150ms latency,200KB/s. One run per condition; not field Core Web Vitals/INP proof.
 
 | Metric | Baseline | Optimized |
 | --- | ---: | ---: |
@@ -54,15 +57,10 @@ Same local cold-load conditions, uncompressed local delivery including workers. 
 | Desktop CLS |0.1539|0.0304|
 | Phone CLS |0.2657|0.0577|
 
-Evidence: sibling `output/performance-baseline.json`, `output/performance-optimized.json`. Large team binaries remain a slow-connection cost. Existing Cloudflare pre-release24h:125visits/142pageviews,LCP P75 976ms,INP81%good/19%needs improvement,CLS50%good/35%poor. Compare equivalent windows after deployment; visits are not unique people.
+Raw evidence: sibling `output/performance-baseline.json` and `output/performance-optimized.json`. Team-data download remains a slower-connection cost. Pre-release Cloudflare24h:125visits/142pageviews,LCP P75 976ms,INP81%good/19%needs improvement,CLS50%good/35%poor. Monitor equivalent mobile/desktop windows over7/28days after deployment; visits are not unique people.
 
-## Next actions
+## Deliberate limits and future review
 
-1. Local105browser suite completed successfully; do not rerun without new changes/failures. Disposable database8cases passed after both migration-source updates.
-2. Commit/push the tested follow-up and verify its queued release/database CI. First release39971805865 succeeded and saved valid data cache; follow-up should reuse it.
-3. Verify deployed commit/assets, free tools, account-field visibility, phone layout, nonzero scores and shared links. Record actual publication; do not claim live fixes prematurely.
-4. Keep analytics off as chosen. Finish plain-English results/report links/limits. Stop completion heartbeat only once authorized work is actually complete.
+Physical iPhone keyboard/rotation/screen-reader testing, two-real-device authenticated JWT testing, real parallel PostgreSQL sessions, long-session memory profiling and exhaustive independent battle outcomes were not performed. Desktop-source security fixes do not retroactively change downloaded executables. Stronger security policies and optional analytics require separate reviewed approval. These are disclosed limits, not claimed completed certifications or invented vulnerabilities.
 
-## Boundaries
-
-No secrets printed, customer roster testing, third-party attacks, silent data discard/migration, or production security changes beyond approved report-limit fix. Continue independent work when approval needed. Preserve all free tools and visual identity. No getting-started guide or bug-fix What's New entry.
+The current authorized audit/release work is complete. Stop the completion heartbeat; future tracking activation or new changes require a fresh user request. Preserve all existing data and do not reactivate Stripe/VIP.

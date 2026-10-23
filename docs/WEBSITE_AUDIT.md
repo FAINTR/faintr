@@ -4,7 +4,7 @@ October 23, 2026. Initial inspection preceded changes. The review covers the bro
 
 ## Findings, ranked by user impact
 
-“Prepared” means changed locally and subject to the release checks; production verification is recorded in `AUDIT_PROGRESS.md` after deployment.
+The application fixes below have passed the release gates and are published. The separate desktop-source fixes require a new executable build; previously downloaded executables do not change. Optional analytics and additional security-policy proposals remain explicitly deferred. Exact release verification is recorded in `AUDIT_PROGRESS.md`.
 
 | Severity | Confirmed problem and impact | Reproduce / verify | Fix |
 | --- | --- | --- | --- |
@@ -50,6 +50,14 @@ This is emulated viewport and browser-engine coverage. It does not emulate an ac
 ## Maintainability
 
 The shared core and engine glue avoid implementing separate formulas for browser and desktop. New worker-pool, storage-patch, team-rule and build-policy modules isolate the fragile paths and have focused tests. The large UI script, string-evaluated engine helpers and growing caches remain maintenance risks. A broad framework rewrite would add risk without fixing the verified failures, so no storage/framework migration was attempted.
+
+## Production checks and unconfirmed observations
+
+The application release passed 105 browser checks on GitHub, 72 calculation/application/analytics/operations regression cases, and the separate eight-test disposable database suite. A clean public-browser check at 1440/320/375/430px confirmed nonzero scores, ten visible grade badges, full names/moves, no page-wide overflow, readable account inputs (about 10.49:1 text contrast) and restored/graded sharing. Live WebKit also restored and graded the public shared setup under the production security policy. Public pages, canonical tags, sitemap, robots and the404 response were checked; the delivered app source matches the tested source. Optional analytics is confirmed off.
+
+One earlier live Chromium check did not show the restored shared-team panel before its timeout. Its failure-state details were not captured, so the cause is unknown. A focused diagnostic, five consecutive fresh-browser repetitions and the later complete desktop/phone smoke check all restored it successfully; WebKit succeeded too. This is an **unresolved observation**, not a proven new defect or a claimed fix. If it recurs, capture the visible loader/error state and failed public resource requests before refreshing; exclude account details. The raw local evidence is in sibling workspace `output/share-reliability.json`, `deployed-smoke.json` and `deployed-smoke-webkit.json`.
+
+Physical iPhone keyboard/rotation/screen-reader checks, two-real-device authenticated JWT testing, long-session memory profiling and broader independent battle-mechanics golden outcomes remain testing limits. These are not invented confirmed vulnerabilities or claims of completed real-device certification.
 
 ## Follow-up reports and boundaries
 
