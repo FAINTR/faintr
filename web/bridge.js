@@ -11,7 +11,15 @@
   const LS = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } } };
   const listeners = new Set();
-  const state = { manifest: null, worker: null, user: null, profile: null, sb: null, doc: null, progress: null, membership: { active: false } };
+  const state = { manifest: null, worker: null, user: null, profile: null, sb: null, doc: null, progress: null, membership: { active: false }, authNotice: null };
+  // Keep a safe explanation before the SDK consumes the callback. Never display
+  // arbitrary callback descriptions or credentials from the address bar.
+  const callbackParams = new URL('https://callback.invalid/?' + (location.hash || '').replace(/^#/, '')).searchParams;
+  if (callbackParams.has('error') || callbackParams.has('error_description')) {
+    state.authNotice = callbackParams.get('error_code') === 'otp_expired'
+      ? 'This email link is invalid or has expired. Request a new confirmation email below and use the newest message. If you already confirmed, try signing in.'
+      : 'The sign-in link could not be completed. Try signing in, or request a new confirmation email below if your email is not confirmed.';
+  }
   const emit = (reason) => listeners.forEach((fn) => { try { fn(state, reason); } catch (e) { /* ignore */ } });
 
   // ---------- Supabase (optional until configured)
@@ -323,6 +331,7 @@
     },
     async signIn(email, password) { const { error } = await state.sb.auth.signInWithPassword({ email, password }); if (error) throw error; },
     async magicLink(email) { const { error } = await state.sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin } }); if (error) throw error; },
+    async resendConfirmation(email) { const { error } = await state.sb.auth.resend({ type: 'signup', email, options: { emailRedirectTo: location.origin } }); if (error) throw error; },
     async oauth(provider) { const { error } = await state.sb.auth.signInWithOAuth({ provider, options: { redirectTo: location.origin } }); if (error) throw error; },
     async resetPassword(email) { const { error } = await state.sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin }); if (error) throw error; },
     async updatePassword(password) { const { error } = await state.sb.auth.updateUser({ password }); if (error) throw error; },
@@ -406,8 +415,15 @@
   (async () => {
     try {
       if (sbReady) {
-        const { data } = await state.sb.auth.getSession();
-        await onAuth(data.session);
+        const { data, error } = await state.sb.auth.getSession();
+        if (error && !state.authNotice) state.authNotice = 'Your sign-in could not be completed. Please try signing in again. If your email is not confirmed, request a new confirmation email below.';
+        if (state.authNotice && typeof history !== 'undefined') {
+          const clean = new URL(location.href);
+          for (const key of ['error', 'error_code', 'error_description']) callbackParams.delete(key);
+          clean.hash = callbackParams.toString();
+          history.replaceState(history.state, '', clean.pathname + clean.search + clean.hash);
+        }
+        await onAuth(data?.session || null);
         state.sb.auth.onAuthStateChange((event, session) => {
           // Run requests after Supabase releases its auth callback lock.
           setTimeout(async () => { await onAuth(session); if (event === 'PASSWORD_RECOVERY') emit('password-recovery'); }, 0);

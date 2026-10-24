@@ -306,6 +306,27 @@ test('optional analytics waits for consent, records one tool action and stops af
  const keys=await page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('faintr.analytics.')));expect(keys).toEqual(['faintr.analytics.consent']);
  for(const event of events)expect(Object.keys(event).sort()).toEqual(['id','event','tool','source','visitor','session','returning','consent'].sort());
 });
+test('email confirmation failure offers safe resend, cooldown and delivery-error recovery',async({page})=>{
+ await page.route('**/config.js*',route=>route.fulfill({contentType:'text/javascript',body:'window.FAINTR_CONFIG={supabaseUrl:"https://release.invalid",supabaseAnonKey:"synthetic-test-key"};'}));
+ await page.route('**/vendor/supabase.js*',route=>route.fulfill({contentType:'text/javascript',body:`window.__resends=0;window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}}),onAuthStateChange:()=>{},signInWithPassword:async()=>({error:{code:'email_not_confirmed',message:'Email not confirmed'}}),resend:async()=>{window.__resends++;return window.__limited?{error:{status:429}}:{error:null};}}})};`}));
+ await page.goto('/#error=access_denied&error_code=otp_expired&error_description=untrusted-private-value');
+ await expect(page.locator('#authDlg')).toBeVisible();await expect(page.locator('#authStatus')).toContainText('expired');
+ expect(page.url()).not.toContain('untrusted-private-value');
+ await page.locator('#authResend').click();await expect(page.locator('#authStatus')).toContainText('valid email');
+ await page.locator('#authEmail').fill('synthetic@example.invalid');await page.locator('#authPass').fill('SyntheticTest123!');
+ await page.locator('#authGo').click();await expect(page.locator('#authStatus')).toContainText('do not need to create another account');
+ await page.evaluate(()=>window.__limited=true);await page.locator('#authResend').click();await expect(page.locator('#authStatus')).toContainText('Too many email requests');
+ await page.evaluate(()=>window.__limited=false);await page.locator('#authResend').click();await expect(page.locator('#authStatus')).toContainText('newest link');
+ await page.locator('#authResend').click();await expect(page.locator('#authStatus')).toContainText('wait a minute');
+ expect(await page.evaluate(()=>window.__resends)).toBe(2);await fits(page);
+ // Also let the real bundled SDK process a rejected callback. External requests
+ // remain blocked; no valid token, account or inbox is involved.
+ await page.unroute('**/vendor/supabase.js*');
+ await page.goto('/?auth-recovery-test=1#error=access_denied&error_code=otp_expired&error_description=untrusted-private-value');
+ await expect(page.locator('#authDlg')).toBeVisible();await expect(page.locator('#authStatus')).toContainText('expired');
+ expect(await page.evaluate(()=>window.FAINTR_BRIDGE.auth.available)).toBe(true);
+ expect(page.url()).not.toContain('untrusted-private-value');await fits(page);
+});
 test('guest account and battle tools dialogs fit without accessing a real account',async({page})=>{
   await page.route('**/config.js*',route=>route.fulfill({contentType:'text/javascript',body:'window.FAINTR_CONFIG={supabaseUrl:"https://release.invalid",supabaseAnonKey:"synthetic-test-key",loginProviders:"discord,google"};'}));
   await loaded(page);

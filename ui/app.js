@@ -1761,12 +1761,28 @@ if (WEB) {
         const r = await A.signUp(email, pass, $('#authName').value.trim());
         $('#authStatus').textContent = r.session ? 'Account created. You are signed in.' : 'Check your email to confirm your account, then sign in.';
       } else { await A.signIn(email, pass); $('#authDlg').close(); showToast('Signed in.'); }
-    } catch (err) { $('#authStatus').textContent = err.message; }
+    } catch (err) { $('#authStatus').textContent = err.code === 'email_not_confirmed' || /email not confirmed/i.test(err.message || '')
+      ? 'Your email is not confirmed yet. Use Resend confirmation email below, then open the newest email. You do not need to create another account.' : err.message; }
     finally{$('#authGo').disabled=false;}
   });
   $('#authMagic').addEventListener('click', async () => {
     const email = $('#authEmail').value.trim(); if (!email) { $('#authStatus').textContent = 'Enter your email first.'; return; }
     try { await window.FAINTR_BRIDGE.auth.magicLink(email); $('#authStatus').textContent = 'Check your email for a sign-in link.'; } catch (err) { $('#authStatus').textContent = err.message; }
+  });
+  let resendAfter = 0;
+  $('#authResend').addEventListener('click', async () => {
+    const field = $('#authEmail'), button = $('#authResend');
+    if (!field.value.trim() || !field.checkValidity()) { $('#authStatus').textContent = 'Enter a valid email address first.'; field.focus(); return; }
+    if (button.disabled) return;
+    if (Date.now() < resendAfter) { $('#authStatus').textContent = 'Please wait a minute before requesting another confirmation email.'; return; }
+    button.disabled = true;
+    try {
+      await window.FAINTR_BRIDGE.auth.resendConfirmation(field.value.trim());
+      resendAfter = Date.now() + 60000;
+      $('#authStatus').textContent = 'If this email has an account awaiting confirmation, a new email has been requested. Check spam too, use only the newest link, then sign in. If already confirmed, sign in normally.';
+    } catch (err) { $('#authStatus').textContent = err.status === 429 || err.code === 'over_email_send_rate_limit'
+      ? 'Too many email requests. Please wait a few minutes, then try again.' : 'Could not request a confirmation email. Please try again shortly. Your existing account and saved data have not been changed.';
+    } finally { button.disabled = false; }
   });
   $('#authForgot').addEventListener('click', async () => {
     const email = $('#authEmail').value.trim(); if (!email) { $('#authStatus').textContent = 'Enter your email first.'; return; }
@@ -1833,6 +1849,10 @@ if (WEB) {
     if (AUTH.returnToPremium && st.user) { AUTH.returnToPremium = false; $('#authDlg').close(); openPremium(); }
     if (st.user && c.saved && hasPremium() && !AUTH.offered) { AUTH.offered = true; showToast(`You have ${c.saved} saved team${c.saved === 1 ? '' : 's'} in this browser.`, { label: 'Add to my account', run: async () => { await window.FAINTR_BRIDGE.auth.moveLocalToAccount(); if ($('#view-saved').classList.contains('on')) loadSaved(); showToast('Added to your account.'); } }); }
   });
+  window.FAINTR_BRIDGE.ready.then(() => {
+    const notice = window.FAINTR_BRIDGE.state.authNotice;
+    if (notice && !window.FAINTR_BRIDGE.state.user) { setAuthMode('in'); openAuth(); $('#authStatus').textContent = notice; }
+  }).catch(() => {});
 }
 // Keep startup progress in the results area while the rest of the site stays visible.
 function showLoader(title, loaded, total) {

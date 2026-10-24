@@ -32,12 +32,12 @@ Local Chromium, one sample per condition, synthetic copies with actual cached ev
 
 | Profile / roster size | Old opening | Paged opening | Old clear search | Paged clear search | Old / paged page elements |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Desktop / 500 | 3,196 ms | 434 ms | 1,872 ms | 131 ms | 108,084 / 17,192 |
-| Desktop / 2,000 | 18,867 ms | 510 ms | 11,258 ms | 198 ms | 418,584 / 24,692 |
-| Slow phone / 500 | 24,324 ms | 1,367 ms | 9,392 ms | 661 ms | 108,084 / 17,192 |
-| Slow phone / 2,000 | Opening action timed out at 30 seconds | 2,518 ms | Not captured | 690 ms | Not captured / 24,692 |
+| Desktop / 500 | 3,196 ms | 585 ms | 1,872 ms | 249 ms | 108,084 / 17,193 |
+| Desktop / 2,000 | 18,867 ms | 279 ms | 11,258 ms | 318 ms | 418,584 / 24,693 |
+| Slow phone / 500 | 24,324 ms | 3,348 ms | 9,392 ms | 732 ms | 108,084 / 17,193 |
+| Slow phone / 2,000 | Opening action timed out at 30 seconds | 2,145 ms | Not captured | 676 ms | Not captured / 24,693 |
 
-The original run overlapped recovery browser tests for part of its duration; the paged run did not. Treat time differences as diagnostic samples, **not a controlled speed-up percentage or guarantee**. The DOM reduction and bounded 50-card render are directly verified. Main-thread heap was recorded after the change only; no before/after whole-browser or worker-memory claim is justified. Raw captures are in sibling workspace `output/roster-baseline.json` and `output/roster-paged.json`; the baseline was transcribed from tool output after its final condition timed out.
+The original run overlapped recovery browser tests for part of its duration; the final paged run did not. Treat time differences as diagnostic samples, **not a controlled speed-up percentage or guarantee**. The DOM reduction and bounded 50-card render are directly verified. Main-thread heap was recorded after the change only; no before/after whole-browser or worker-memory claim is justified. Raw captures are in sibling workspace `output/roster-baseline.json`, the earlier `output/roster-paged.json` and final `output/roster-final.json`. The final sample includes the later confirmation-recovery button (one additional page element). The baseline was transcribed from tool output after its final condition timed out.
 
 The roster browser case uses 2,000 entries at every test size. It verifies next/previous pages in card and list modes, searching the final entry across all pages, editing and refresh persistence, criteria resetting pagination, export of all 2,000 entries even while one search result is shown, and no page-wide overflow.
 
@@ -58,3 +58,15 @@ The main follow-up release, commit `ad935e4494593ea1f6979a2b40581d558c4fc815`, i
 The next visual release, 40038061328, was correctly blocked by its Safari gate. Its mouse-style suggestion click had not selected the opponent in the touch profile. Phone suggestion tests now use native taps and assert selection explicitly. A separate local 124/125 result exposed the real IV-preview layout shift described above. Neither failed run is represented as successful. The corrected 15 targeted cases passed, and the expanded IV-position check passed at all five profiles for both custom Great and default Mega IVs. All 86 Node cases also pass against the newly fetched PvPoke `38f7032_2026-10-23`. The roster-name and IV-layout corrections await the full 130-case release gate, fresh-data build, publication and live checks. No new bug-fix What's New entry is being published.
 
 Release40062723181 was deliberately cancelled before publication after discovering the native-engine cache-key omission. The added cache regression passes, bringing the Node total to87. A replacement build must recompute current formats consistently with the new source. The earlier successful live release remains available during this validation.
+
+## October 24 release verification
+
+Release 40063063902 for commit `2ce45875ff17477a6a41cd17f1967e431215e8cf` succeeded, rebuilding current data against PvPoke `38f7032_2026-10-23` and passing the 87 Node cases, sharing checks, reported-team reproduction and full 130-case browser gate before publishing. The local full 130-case suite also passed. The previously blocked visual and IV-loading corrections are now live.
+
+The final read-only production check passed in Chromium at 1440/320/375/430px and iPhone WebKit at 375px. Published app/CSS source matched the reviewed revision; all ten grade badges remained visible, scores were nonzero, roster paging/full names worked, an existing short link restored and graded, Morpeko alternated electric/dark charged types, invalid links showed home recovery, and no page errors were observed. Free access and optional analytics off were confirmed. Raw evidence: sibling `output/live-followup.json`. These are synthetic isolated browser checks, not physical-phone or real-account JWT certification.
+
+## October 24 email-confirmation report
+
+**Confirmed, medium severity:** an unconfirmed email account reached a dead end: the site displayed the raw authentication error but offered no way to resend signup confirmation. Failed email callback fragments were not explained in the UI. To reproduce, sign in with an unconfirmed synthetic account, or open an expired-link callback fragment. The recovery change adds an explicit confirmation resend button, validates the address, blocks duplicate in-flight requests, adds a short local cooldown, explains provider rate limits and failures, and directs the member to the newest email without recreating their account. Callback notices use fixed text and remove callback error parameters after SDK processing. Confirmation, OAuth and existing saved data remain intact; no production auth policy, email template, expiry or account record is changed.
+
+**Not established:** the screenshot does not identify why that particular member's email remained unconfirmed. Expired/previously used links, email-scanner consumption, and incorrect project templates/redirect settings require member timing or read-only provider configuration/log evidence. They are not asserted as findings. No real member email was submitted or account inspected in these tests. Supabase documents the [signup resend API](https://supabase.com/docs/reference/javascript/auth-resend) and [email templates / scanner considerations](https://supabase.com/docs/guides/auth/auth-email-templates). The new recovery path does not prove actual inbox delivery or fix an unverified provider configuration issue.

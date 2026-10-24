@@ -111,11 +111,26 @@ async function bridge(user={id:'account-a',email:'a@example.invalid'},options={}
   const sb={from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:{display_name:'Test',is_admin:false}})})})}),auth:{getSession:async()=>({data:{session:user?{user}:null}}),onAuthStateChange:fn=>callback=fn}};
   if(options.from)sb.from=options.from;
   sb.auth.signOut=async()=>({error:options.signOutError||null});
+  sb.auth.resend=async body=>{if(options.resend)return options.resend(body);return {error:null};};
   const window={FAINTR_CONFIG:user?{supabaseUrl:'https://example.invalid',supabaseAnonKey:'synthetic'}:{},supabase:{createClient:()=>sb},FAINTR_STORAGE_PATCHES:patches};
-  const context={window,Worker:FakeWorker,URL,location:{origin:'https://faintr.test'},localStorage:{getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)},setTimeout,fetch:async()=>({ok:true,json:async()=>({files:{'core.js':'core.js'}})})};
+  const context={window,Worker:FakeWorker,URL,location:{origin:'https://faintr.test',hash:options.hash||''},localStorage:{getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)},setTimeout,fetch:async()=>({ok:true,json:async()=>({files:{'core.js':'core.js'}})})};
   vm.runInNewContext(fs.readFileSync('web/bridge.js','utf8'),context);await window.FAINTR_BRIDGE.ready;
   return {api:window.FAINTR_BRIDGE,workers,values,switchUser:async next=>{callback('SIGNED_IN',next?{user:next}:null);await new Promise(r=>setTimeout(r,10));}};
 }
+
+test('confirmation recovery resends a signup email to the current site without changing user data',async()=>{
+ let sent;const b=await bridge(undefined,{resend:async body=>{sent=body;return {error:null};}});
+ await b.api.auth.resendConfirmation('synthetic@example.invalid');
+ assert.deepEqual(JSON.parse(JSON.stringify(sent)),{type:'signup',email:'synthetic@example.invalid',options:{emailRedirectTo:'https://faintr.test'}});
+ assert.equal(b.api.state.user.id,'account-a');
+ const limited=await bridge(undefined,{resend:async()=>({error:{code:'over_email_send_rate_limit',status:429}})});
+ await assert.rejects(limited.api.auth.resendConfirmation('synthetic@example.invalid'),e=>e.status===429);
+});
+test('verification callback failure remains recoverable and never echoes arbitrary URL content',async()=>{
+ const b=await bridge(undefined,{hash:'#error=access_denied&error_code=otp_expired&error_description=%3Cscript%3Eprivate-token%3C/script%3E'});
+ assert.match(b.api.state.authNotice,/expired/);assert.doesNotMatch(b.api.state.authNotice,/private-token|script/);
+ const normal=await bridge();assert.equal(normal.api.state.authNotice,null);
+});
 test('switching accounts terminates the old core and rejects old operations',async()=>{
   const b=await bridge(),old=b.workers[0];const pending=assert.rejects(b.api.api('/api/roster',{}),/account changed/);await tick();
   await b.switchUser({id:'account-b',email:'b@example.invalid'});await pending;
