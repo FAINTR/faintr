@@ -16,6 +16,21 @@ test('published leagues rebuild on changed inputs and unverified seeds cannot by
  assert(!policy.publishable({hasData:true,record:{hash:'old'},hash:'new',state:'reused'}));
  assert(policy.publishable({hasData:true,hash:'new',state:'built'}));assert(policy.publishable({hasData:true,hash:'new',preview:true}));
 });
+test('upstream simulation-only updates invalidate cached rankings, without invalidating for unrelated UI files',()=>{
+ const path=require('node:path'),inputs=require('./build-inputs.cjs'),{ENGINE_FILES}=require('../engine');
+ const F={key:'all-1500',cup:'all',cp:1500,meta:'great'},root='synthetic-source';
+ const files=new Map(inputs.inputFiles(F).map(file=>[path.join(root,file),Buffer.from('fixture:'+file)]));
+ const read=file=>{if(!files.has(file))throw Error('Missing synthetic input');return files.get(file);};
+ const baseline=inputs.inputHash(root,F,'code-v1',read);
+ for(const file of ENGINE_FILES){
+  const key=path.join(root,file),previous=files.get(key);files.set(key,Buffer.from('changed:'+file));
+  assert.notEqual(inputs.inputHash(root,F,'code-v1',read),baseline,file+' must invalidate the cache');files.set(key,previous);
+ }
+ files.set(path.join(root,'ui/app.css'),Buffer.from('cosmetic change'));assert.equal(inputs.inputHash(root,F,'code-v1',read),baseline);
+ assert.notEqual(inputs.inputHash(root,F,'code-v2',read),baseline);
+ const gm=path.join(root,'data/gamemaster.json'),saved=files.get(gm);files.delete(gm);assert.notEqual(inputs.inputHash(root,F,'code-v1',read),baseline);files.set(gm,saved);
+ assert.equal(inputs.inputHash(root,F,'code-v1',read),baseline);
+});
 class WorkerStub {
   static made=[];
   constructor(){WorkerStub.made.push(this);this.sent=[];}

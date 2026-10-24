@@ -2,6 +2,8 @@
 
 Follow-up: a 2,000-entry synthetic roster reproduced a severe DOM/rendering bottleneck. A bounded 50-entry page now preserves full-roster search and export. Additional timing samples, DOM counts, continuous-session results and measurement limits are recorded in `FOLLOWUP_AUDIT.md`; the original cold-load measurements below remain unchanged.
 
+The follow-up also closes a cache-key gap: all native PvPoke engine scripts now participate in ranking-data invalidation, including engine-only updates without new game data. Current formats rebuild consistently before release. This may require a longer rebuild when calculation code changes; serving older calculated results is not used as a performance shortcut.
+
 ## Live baseline
 
 The existing Cloudflare Web Analytics dashboard was inspected read-only. For its previous-24-hour, bot-excluded faintr.com view before this release, it showed:

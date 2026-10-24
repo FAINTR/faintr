@@ -115,16 +115,8 @@ async function pvpokeSource() {
 // ---------- 2. team data per format
 // Inputs that affect built numbers: rebuild current leagues/cups; withhold other stale caches.
 const CODE = ['build.js', 'build_worker.js', 'antimeta_worker.js', 'scoring.js', 'threevthree.js', 'memberlib.js', 'pvpoke_grades.js', 'engine.js', 'engine_glue.js', 'metrics.js', 'teamcodec.js'];
-const codeHash = sha(Buffer.concat([Buffer.from(`schema${SCHEMA}-verified-inputs-v2`), ...CODE.map((f) => fs.readFileSync(path.join(ROOT, f)))]));
-function inputFiles(F) {
-  const cup = F.filesCup || F.cup;
-  return ['data/gamemaster.json', ...['overall', 'leads', 'closers', 'switches'].map((c) => rankingFile(cup, c, F.cp)), `data/groups/${F.meta}.json`];
-}
-function inputHash(src, F) {
-  const h = crypto.createHash('sha256').update(codeHash).update(F.key);
-  for (const f of inputFiles(F)) { try { h.update(fs.readFileSync(path.join(src, f))); } catch (e) { h.update('missing:' + f); } }
-  return h.digest('hex');
-}
+const codeHash = sha(Buffer.concat([Buffer.from(`schema${SCHEMA}-verified-inputs-v3`), ...CODE.map((f) => fs.readFileSync(path.join(ROOT, f)))]));
+const inputHash=(src,F)=>rq('tools/build-inputs.cjs').inputHash(src,F,codeHash);
 const hasData = (dir) => readJ(path.join(dir, 'teams.json'), {}).schema === SCHEMA && fs.existsSync(path.join(dir, 'teams.bin')) && fs.existsSync(path.join(dir, 'antimeta.json'));
 
 async function buildFormats(src, version, formats) {
