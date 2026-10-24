@@ -73,11 +73,11 @@ test('all sections, filters, data dialog and help close on phones', async ({page
   }
   await expect(page.getByRole('link',{name:'Terms',exact:true})).toBeVisible();
 });
-test('populated IV family and ranking tables stay inside the screen', async ({page}) => {
+test('populated IV family and ranking tables stay inside the screen', async ({page},info) => {
   await loaded(page);
   await page.getByRole('tab',{name:'PvP IVs',exact:true}).click();
   await page.locator('#pk-iv input').fill('Azumarill');
-  await page.locator('#pk-iv .suggest button').first().click();
+  if(info.project.use.hasTouch)await page.locator('#pk-iv .suggest button').first().tap();else await page.locator('#pk-iv .suggest button').first().click();
   await expect(page.locator('#ivFam table')).toBeVisible();
   await expect(page.locator('#ivTable tbody tr').first()).toBeVisible();
   await fits(page);
@@ -155,7 +155,7 @@ test('populated grading breakdowns fit at every report tab',async({page},info)=>
   }
 });
 
-test('populated battle, timeline and detailed tables fit on phones',async({page})=>{
+test('populated battle, timeline and detailed tables fit on phones',async({page},info)=>{
   await loaded(page);
   await page.locator('#cupSel').selectOption('all-1500');
   await expect(page.locator('#matched')).toContainText('Great League');
@@ -163,7 +163,8 @@ test('populated battle, timeline and detailed tables fit on phones',async({page}
   for(const [i,name] of ['Azumarill','Clodsire'].entries()) {
     const editor=page.locator('#bsides .ed').nth(i);
     await editor.locator('.picker input').fill(name);
-    await editor.locator('.suggest button').first().click();
+    if(info.project.use.hasTouch)await editor.locator('.suggest button').first().tap();else await editor.locator('.suggest button').first().click();
+    await expect(editor.locator('.picked')).toContainText(name);
   }
   await page.locator('#battleBtn').click();
   await expect(page.locator('#battleResult article')).toBeVisible();await fits(page);
@@ -171,12 +172,14 @@ test('populated battle, timeline and detailed tables fit on phones',async({page}
   await expect(page.locator('#battleResult svg')).toBeVisible();
 });
 
-test('battle results and IV comparisons use the exact winner when ratings round to 500',async({page})=>{
+test('battle results and IV comparisons use the exact winner when ratings round to 500',async({page},info)=>{
   await loaded(page);await page.locator('#cupSel').selectOption('all-1500');await expect(page.locator('#matched')).toContainText('Great League');
   await page.getByRole('tablist',{name:'Sections'}).getByRole('tab',{name:'Matchups',exact:true}).click();
   for(const [i,name] of ['Azumarill','Clodsire'].entries()){
-    const editor=page.locator('#bsides .ed').nth(i);await editor.locator('.picker input').fill(name);await editor.locator('.suggest button').first().click();
+    const editor=page.locator('#bsides .ed').nth(i);await editor.locator('.picker input').fill(name);if(info.project.use.hasTouch)await editor.locator('.suggest button').first().tap();else await editor.locator('.suggest button').first().click();
+    await expect(editor.locator('.picked')).toContainText(name);
   }
+  await expect(page.locator('#bsides .ivstats .spin')).toHaveCount(0);
   await page.evaluate(()=>{
     const original=window.FAINTR_BRIDGE.api;window.__syntheticWinner=0;
     window.FAINTR_BRIDGE.api=async(url,body)=>{
@@ -186,7 +189,7 @@ test('battle results and IV comparisons use the exact winner when ratings round 
     };
   });
   for(const [winner,label] of [[0,'Win'],[1,'Loss'],[-1,'Tie']]){
-    await page.evaluate(w=>window.__syntheticWinner=w,winner);await page.locator('#battleBtn').click();
+    await page.evaluate(w=>window.__syntheticWinner=w,winner);if(info.project.use.hasTouch)await page.locator('#battleBtn').tap();else await page.locator('#battleBtn').click();
     await expect(page.locator('#battleResult .vs')).toHaveText(label);
     await expect(page.locator('#battleResult')).toContainText(label+', 167 HP left');await fits(page);
   }
@@ -410,7 +413,7 @@ test('roster CP and league choices govern every team picker',async({page})=>{
   await expect(roster.locator('option[value="great-only"]')).toHaveCount(1);
   await fits(page);
 });
-test('Mega Master shared teams retain the additional charged move when reshared',async({page})=>{
+test('Mega Master shared teams retain the additional charged move when reshared',async({page},info)=>{
   const mega={v:1,f:'mega-10000',m:[
     {id:'mewtwo_mega_y',moveset:['PSYCHO_CUT','PSYSTRIKE','THUNDERBOLT','FUTURE_SIGHT_PLUS']},
     {id:'melmetal',moveset:['THUNDER_SHOCK','DOUBLE_IRON_BASH','DYNAMIC_PUNCH']},
@@ -421,8 +424,23 @@ test('Mega Master shared teams retain the additional charged move when reshared'
   await expect(page.locator('#loader')).toBeHidden();
   await expect(page.locator('#sharedTeamNote')).toBeVisible();
   await expect(page.locator('#slots .slot').first().locator('select[data-m="3"]')).toHaveValue('FUTURE_SIGHT_PLUS');
-  await page.locator('#shareGradeBtn').click();
+  await expect(page.locator('#slots .ivstats .spin')).toHaveCount(0);
+  if(info.project.use.hasTouch)await page.locator('#shareGradeBtn').tap();else await page.locator('#shareGradeBtn').click();
   await expect(page.locator('#teamShareDialog')).toBeVisible();
   expect(captured.m[0].moveset).toEqual(mega.m[0].moveset);
   await fits(page);
+});
+
+test('IV loading keeps the grader action buttons in place',async({page})=>{
+  const original=fs.readFileSync('ui/app.js','utf8');
+  await page.route('**/static/app.js*',route=>route.fulfill({contentType:'text/javascript',body:`(()=>{const original=window.FAINTR_BRIDGE.api;let release;const ready=new Promise(r=>release=r);window.__releaseIV=release;window.FAINTR_BRIDGE.api=(url,body)=>url.split('?')[0]==='/api/iv'?ready.then(()=>original(url,body)):original(url,body);})();\n`+original}));
+  const mega={v:1,f:'mega-10000',m:[{id:'mewtwo_mega_y',moveset:['PSYCHO_CUT','PSYSTRIKE','THUNDERBOLT','FUTURE_SIGHT_PLUS']},{id:'melmetal',moveset:['THUNDER_SHOCK','DOUBLE_IRON_BASH','DYNAMIC_PUNCH']},{id:'palkia_origin',moveset:['DRAGON_BREATH','AQUA_TAIL','SPACIAL_REND']}]};
+  for(const team of [setup,mega]){
+    await page.goto('/share/'+codec.encode(team));await expect(page.locator('#sharedTeamNote')).toBeVisible();
+    await expect(page.locator('#slots .ivstats[aria-busy="true"]')).toHaveCount(3);
+    const position=()=>page.locator('#shareGradeBtn').evaluate(e=>e.getBoundingClientRect().top+scrollY);
+    const before=await position();await page.evaluate(()=>window.__releaseIV());
+    await expect(page.locator('#slots .ivstats[aria-busy="false"]')).toHaveCount(3);
+    expect(Math.abs(await position()-before),team.f+' loading shift').toBeLessThanOrEqual(1);await fits(page);
+  }
 });

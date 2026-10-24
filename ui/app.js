@@ -439,10 +439,31 @@ function monEditor(el, opts = {}) {
   });
   // Picking goes through opts.beforeSet so the grader can swap slots instead of duplicating a Pokemon
   function choose(p, preset) { if (opts.beforeSet && opts.beforeSet(p, preset)) return; set(p, preset); }
+  function reserveIVStats() {
+    const stats=$('.ivstats',el),previous=stats.getBoundingClientRect().height;
+    if(!stats.clientWidth)return; // showView reserves it once a hidden editor becomes visible.
+    // Measure the existing badge layout at this editor's width. Hidden examples
+    // reserve its largest ordinary values without displaying invented stats.
+    const model=document.createElement('div');model.className='ivstats iv-size-model';model.setAttribute('aria-hidden','true');
+    model.style.width=stats.clientWidth+'px';
+    model.innerHTML=['IV rank <b>4,096</b> of 4,096','Stat product <b>100.0%</b> of rank 1','Level <b>51.5</b>','CP <b>9,999</b>','Atk <b>999.9</b> Def <b>999.9</b> HP <b>999</b>','Stat ranks <b>4,096</b> / <b>4,096</b> / <b>4,096</b>',...(st.ivMode==='default'?['Using PvPoke default IVs']:[])].map(text=>`<span class="stat">${text}</span>`).join('');
+    stats.append(model);
+    // A line of headroom covers different flex wrapping and font rounding when
+    // real values replace the widest examples; it also prevents tiny shifts.
+    const style=getComputedStyle(model),line=Math.max(...Array.from(model.children,chip=>chip.getBoundingClientRect().height))+parseFloat(style.rowGap||0)+2;
+    const reserved=model.getBoundingClientRect().height+line;model.remove();
+    stats.style.minHeight=Math.ceil(Math.max(previous,reserved))+'px';
+  }
+  $('.ivstats',el)._reserveSpace=reserveIVStats;
+  function loadingIVStats() {
+    const stats=$('.ivstats',el);reserveIVStats();
+    stats.setAttribute('aria-busy','true');
+    stats.innerHTML='<span class="note"><span class="spin"></span> Updating level, CP and IV rank</span>';
+  }
   async function refreshIV() {
     if (!st.p) return;
     const seq = ++ivSeq;
-    $('.ivstats', el).innerHTML = '<span class="note"><span class="spin"></span> Updating level, CP and IV rank</span>';
+    loadingIVStats();
     const body = { id: st.p.id, levelCap: +cap.value, ivs: st.ivMode === 'default' ? null : getIVs() };
     try {
       const iv = await api('/api/iv', body);
@@ -455,8 +476,9 @@ function monEditor(el, opts = {}) {
         <span class="stat" title="Attack, Defense and HP at this level">Atk <b>${iv.stats.atk.toFixed(1)}</b> Def <b>${iv.stats.def.toFixed(1)}</b> HP <b>${iv.stats.hp}</b></span>
         <span class="stat" title="Rank among all IV combos for each stat">Stat ranks <b>${iv.statRanks.atk}</b> / <b>${iv.statRanks.def}</b> / <b>${iv.statRanks.hp}</b></span>
         ${st.ivMode === 'default' ? '<span class="stat">Using PvPoke default IVs</span>' : ''}`;
+      $('.ivstats',el).setAttribute('aria-busy','false');
       if (opts.onChange) opts.onChange();
-    } catch (e) { $('.ivstats', el).textContent = e.message; }
+    } catch (e) { if(seq!==ivSeq)return;$('.ivstats', el).textContent = e.message;$('.ivstats',el).setAttribute('aria-busy','false'); }
   }
   function set(p, preset) {
     st.p = p; st.label = preset && preset.label ? preset.label : '';
@@ -1845,8 +1867,11 @@ function showView(name) {
   if (name === 'roster') {renderRoster();if(S.booted)loadRoster().catch(e=>{$('#rStorageNote').textContent=`Could not refresh your Roster: ${e.message} Your last loaded list is still shown.`;});}
   if (name === 'vip') { syncPremium(); loadVip(); }
   if (name === 'ivs') { renderIvLeague(); if (!IVS.p) { const id = store.get('faintr.ivspecies'); if (id) fullCatalog().then((f) => { const p = f.find((c) => c.id === id); if (p && !IVS.p) setIvSpecies(p); }); } }
+  reservePendingIVSpace();
   window.scrollTo({ top: 0 });
 }
+function reservePendingIVSpace(){$$('.ivstats[aria-busy="true"]').forEach(stats=>stats._reserveSpace?.());}
+window.addEventListener('resize',reservePendingIVSpace);
 $$('nav.tabs button').forEach((b) => {
   const view=$('#view-'+b.dataset.view);b.id||='tab-'+b.dataset.view;b.setAttribute('aria-controls',view.id);b.tabIndex=b.getAttribute('aria-selected')==='true'?0:-1;
   view.setAttribute('role','tabpanel');view.setAttribute('aria-labelledby',b.id);

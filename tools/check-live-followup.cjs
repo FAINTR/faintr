@@ -6,8 +6,10 @@ const normal=s=>s.replace(/\r\n/g,'\n');
 async function get(p){const r=await fetch(base+p,{signal:AbortSignal.timeout(30000)});if(!r.ok)throw Error('Public resource unavailable: '+p+' ('+r.status+')');return r;}
 (async()=>{
  const manifest=await (await get('/manifest.json')).json();assert.equal(manifest.premium,false);
- const config=await (await get('/static/config.js')).text();assert(/"analyticsEnabled"\s*:\s*false/.test(config),'Optional analytics must remain disabled');
- for(const file of ['app.js','app.css'])assert(normal(await (await get('/static/'+file)).text())===normal(fs.readFileSync('ui/'+file,'utf8')),'Live '+file+' differs from reviewed local source');
+ const html=await (await get('/')).text();
+ const asset=file=>{const found=[...html.matchAll(/(?:src|href)=["']([^"']+)["']/g)].map(m=>m[1].replaceAll('&amp;','&')).find(p=>p.split('?')[0]==='/static/'+file);assert(found,'Published page is missing '+file);return found;};
+ const config=await (await get(asset('config.js'))).text();assert(/"analyticsEnabled"\s*:\s*false/.test(config),'Optional analytics must remain disabled');
+ for(const file of ['app.js','app.css'])assert(normal(await (await get(asset(file))).text())===normal(fs.readFileSync('ui/'+file,'utf8')),'Live '+file+' differs from reviewed local source');
  const provenance=await (await get('/source-provenance.json')).json();
  assert(provenance.faintrEngine.compatibilityRules.some(rule=>rule.includes('Morpeko')));
  const results=[];

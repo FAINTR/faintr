@@ -227,7 +227,8 @@ td.win { background: var(--win); } td.close { background: var(--close); } td.los
 .ivrow { display: grid; grid-template-columns: repeat(3, 1fr) 1.3fr; gap: 6px; align-items: end; }
 .ivrow label { font-size: 12px; color: var(--muted); }
 .ivrow input, .ivrow select { width: 100%; text-align: center; background: var(--surface); }
-.ivstats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ivstats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; position:relative; align-content:flex-start; }
+.ivstats.iv-size-model { position:absolute; visibility:hidden; pointer-events:none; margin:0; top:0; left:0; }
 .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; font-size: 13px; }
 .stat b { font-weight: 600; }
 .stat.good { border-color: var(--fr-amber); } .stat.mid { border-color: var(--line-strong); } .stat.low { border-color: var(--line); }
