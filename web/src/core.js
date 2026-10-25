@@ -96,7 +96,7 @@ function init(manifest) {
     ev: (code) => (0, eval)(code),
     pool, formats, storage, loadFormatData,
     live: () => periodAt(manifest.schedule || { periods: [] }, formats),
-    info: { app: 'FAINTR', version: manifest.appVersion, source: 'web', web: true, installed: manifest.pvpoke, dataBuilt: manifest.built },
+    info: { app: 'FAINTR', version: manifest.appVersion, source: 'web', web: true, installed: manifest.pvpoke, dataBuilt: manifest.built, pendingFormats:manifest.pendingFormats||[] },
     isBuilt: (key) => !!(fmtEntry(key) && fmtEntry(key).built),
     buildStatus: () => null,
     inlineImages: true,

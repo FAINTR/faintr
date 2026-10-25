@@ -45,6 +45,13 @@ test('rankings, readable names/moves, visible badges and expanded detail', async
   await expect(team.locator('.quick')).toBeHidden();
   expect(errors).toEqual([]);
 });
+test('upcoming Halloween Cup is listed honestly until upstream data is available',async({page})=>{
+ const pending=[{key:'upcoming-test-1500',title:'Upcoming Halloween Cup',unavailable:true}];
+ await page.route('**/manifest.json',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({...manifest,pendingFormats:pending})}));
+ await loaded(page);
+ for(const cup of pending){const option=page.locator(`#cupSel option[value="${cup.key}"]`);await expect(option).toHaveCount(1);await expect(option).toBeDisabled();await expect(option).toContainText('awaiting PvPoke data');}
+ await expect(page.locator('#rotationStatus')).toBeVisible();await fits(page);
+});
 test('each built league loads nonzero scores; Anti-Meta remains free', async ({page}) => {
   page.on('pageerror',e=>console.log('League error:',e.message));
   await loaded(page);

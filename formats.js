@@ -16,14 +16,15 @@ const LEAGUE_NAME = { 500: 'Little', 1500: 'Great', 2500: 'Ultra', 10000: 'Maste
 function rankingFile(cup, cat, cp) { return `data/rankings/${cup}/${cat}/rankings-${cp}.json`; }
 
 // All formats PvPoke currently lists (plus the three leagues). srcDir lets us drop cups whose files are missing.
-function listFormats(gamemaster, srcDir) {
+function listFormats(gamemaster, srcDir, scheduledKeys = []) {
   const out = LEAGUES.map((f) => ({ ...f }));
   const seen = new Set(out.map((f) => f.key));
   for (const f of gamemaster.formats || []) {
-    if (!f.showFormat || f.cup === 'custom' || f.cup === 'all') continue;
     const key = `${f.cup}-${f.cp}`;
+    if ((!f.showFormat && !scheduledKeys.includes(key)) || f.cup === 'custom' || f.cup === 'all') continue;
     if (seen.has(key)) continue;
     const cupDef = (gamemaster.cups || []).find((c) => c.name === f.cup);
+    if (!f.showFormat && !cupDef) continue; // A schedule name is not a set of battle rules.
     const cupForFiles = (cupDef && cupDef.rankingAlias) || f.cup;
     if (srcDir && !fs.existsSync(path.join(srcDir, rankingFile(cupForFiles, 'overall', f.cp)))) continue;
     seen.add(key);

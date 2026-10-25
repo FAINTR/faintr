@@ -2,6 +2,61 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const {Pool}=require('../web/src/engine-pool'),patches=require('../ui/storage-patches'),{createCore}=require('../appcore');
 const policy=require('./build-policy.cjs');
 const {requestError}=require('../http-safety');
+const rotation=require('./rotation-schedule.cjs');
+const officialUrl='https://pokemongo.com/news/go-battle-league-twilight-trails';
+const scheduleFixture=(season='Twilight Trails',rows=[['October 20 - October 27','2026-10-20',['Ultra League*','Fantasy Cup: Great League Edition*']],['October 27 - November 3','2026-10-27',['Master League*','Mega Halloween Cup: Great League Edition*']],['November 3 - November 10','2026-11-03',['Great League: Mega Edition*','Ultra League: Mega Edition*','Master League: Mega Edition*']]])=>`<title>GO Battle League: ${season} Update — Pokémon GO</title><p>The following leagues will begin and end at 1:00 p.m. PDT (GMT −7) on the dates listed below.</p>`+rows.map(([dates,day,labels])=>`<div data-slot="GblScheduleBlockItem" data-start-date="${day}T00:34:00Z"><span data-slot="GblScheduleBlockDates">${dates}</span>${labels.map(l=>'<div>'+l+'</div>').join('')}</div>`).join('');
+test('official GL/UL/ML dates use the published 1pm Pacific rule across DST, not stray source times',()=>{
+ const s=rotation.parseOfficial(scheduleFixture(),officialUrl);
+ assert.equal(s.periods[1].start,'2026-10-27T20:00:00.000Z');assert.equal(s.periods[1].end,'2026-11-03T21:00:00.000Z');
+ assert.deepEqual(s.periods[2].formats.map(f=>f[0]),['mega-1500','mega-2500','mega-10000']);
+ assert.equal(s.periods[1].formats[0][0],'halloween-1500');
+ assert.deepEqual(rotation.formatFor('Mega Halloween Cup: Great League Edition',[{key:'halloween-1500',cp:1500,title:'Halloween Cup'}]),['megahalloween-1500','Mega Halloween Cup']);
+ assert.deepEqual(rotation.formatFor('Mega Halloween Cup: Great League Edition',[{key:'halloween_mega-1500',cp:1500,title:'Halloween Cup (Mega)'}]),['halloween_mega-1500','Mega Halloween Cup']);
+ const crossYear=rotation.parseOfficial(scheduleFixture('Next',[['December 29 - January 5','2026-12-29',['Great League']],['January 5 - January 12','2027-01-05',['Ultra League','Master League']]]),officialUrl);
+ assert.equal(crossYear.periods[0].end,'2027-01-05T21:00:00.000Z');
+ assert.throws(()=>rotation.parseOfficial('<h1>Incomplete</h1>',officialUrl),/format changed/);
+ assert.throws(()=>rotation.parseOfficial(scheduleFixture(),'https://untrusted.invalid/news/go-battle-league-fake'),/format changed/);
+});
+test('preparation covers every active league and only the immediate next rotation',()=>{
+ const s=rotation.parseOfficial(scheduleFixture(),officialUrl),now=Date.parse('2026-10-25T12:00Z');
+ assert.deepEqual(rotation.preparationKeys(s,now),['fantasy-1500','all-2500','halloween-1500','all-10000']);
+ const waiting=rotation.pendingFormats(s,[{key:'all-2500'},{key:'fantasy-1500'},{key:'all-10000'}],now);
+ assert.equal(waiting.length,1);assert.equal(waiting[0].key,'halloween-1500');assert(waiting[0].unavailable);
+ assert.deepEqual(rotation.pendingFormats(s,[{key:'all-2500'},{key:'fantasy-1500'},{key:'all-10000'},{key:'halloween-1500'}],now),[]);
+});
+test('scheduled updates include GL/UL/ML changeovers and Wednesday changes with DST-safe midnight jobs',()=>{
+ const s=rotation.parseOfficial(scheduleFixture(),officialUrl);
+ assert(rotation.scheduledUpdate(s,'schedule','0 20 * * *',Date.parse('2026-10-27T20:12Z')));
+ assert(rotation.scheduledUpdate(s,'schedule','0 21 * * *',Date.parse('2026-10-27T21:12Z'))); // retry after daylight-time changeover
+ assert(!rotation.scheduledUpdate(s,'schedule','0 20 * * *',Date.parse('2026-10-26T20:12Z')));
+ assert(rotation.scheduledUpdate(s,'schedule','0 21 * * *',Date.parse('2026-11-03T21:12Z')));
+ assert(rotation.scheduledUpdate(s,'schedule','0 20 * * *',Date.parse('2026-11-03T20:12Z'))); // prewarm before standard-time changeover
+ assert(rotation.scheduledUpdate(s,'schedule','0 5 * * *',Date.parse('2026-10-25T05:12Z')));
+ assert(!rotation.scheduledUpdate(s,'schedule','0 6 * * *',Date.parse('2026-10-25T06:12Z')));
+ assert(rotation.scheduledUpdate(s,'schedule','0 6 * * *',Date.parse('2026-11-05T06:12Z')));
+ assert(rotation.scheduledUpdate({periods:[{start:'2026-11-18T21:00:00Z'}]},'schedule','0 21 * * *',Date.parse('2026-11-18T21:15Z')));
+ assert(rotation.scheduledUpdate(s,'workflow_dispatch','',Date.parse('2026-10-25')));
+});
+test('official refresh discovers a next season and preserves the validated schedule on source failure',async()=>{
+ const now=Date.parse('2026-10-25T12:00Z'),previous=rotation.parseOfficial(scheduleFixture(),officialUrl);
+ const nextUrl='https://pokemongo.com/news/go-battle-league-next-season';
+ const next=scheduleFixture('Next Season',[['December 1 - December 8','2026-12-01',['Great League','Ultra League']],['December 8 - December 15','2026-12-08',['Master League']]]);
+ const fetcher=async url=>({ok:true,url,text:async()=>url===officialUrl?scheduleFixture():url===nextUrl?next:`<a href="/news/go-battle-league-next-season">Next season</a>`});
+ const refreshed=await rotation.refreshSchedule(previous,[],fetcher,now);
+ assert.equal(refreshed.sync.status,'verified');assert(refreshed.sources.includes(nextUrl));assert(refreshed.periods.some(p=>p.start==='2026-12-08T21:00:00.000Z'));
+ const failed=await rotation.refreshSchedule(previous,[],async()=>{throw Error('offline');},now);
+ assert.equal(failed.sync.status,'fallback');assert.deepEqual(failed.periods,previous.periods);
+});
+test('scheduled hidden PvPoke formats require their actual ranking data before being exposed',()=>{
+ const {listFormats}=require('../formats');const gm={formats:[{cup:'halloween',cp:1500,title:'Mega Halloween Cup',showFormat:false}],cups:[{name:'halloween'}]};
+ assert(!listFormats(gm).some(f=>f.key==='halloween-1500'));
+ assert(listFormats(gm,undefined,['halloween-1500']).some(f=>f.key==='halloween-1500'));
+ assert(!listFormats(gm,'missing-synthetic-path',['halloween-1500']).some(f=>f.key==='halloween-1500'));
+ assert(!listFormats({...gm,cups:[]},undefined,['halloween-1500']).some(f=>f.key==='halloween-1500'));
+ const workflow=fs.readFileSync('.github/workflows/daily-data.yml','utf8');
+ for(const hour of [5,6,20,21])assert(workflow.includes(`cron: "0 ${hour} * * *"`));
+ assert(workflow.indexOf('name: Restore built data')<workflow.indexOf('name: Check midnight'));
+});
 test('desktop server rejects cross-site writes, simple form bodies and hostile Host headers',()=>{
  const req={url:'/api/roster/delete',method:'POST',headers:{host:'127.0.0.1:3000','content-type':'application/json',origin:'http://127.0.0.1:3000'}};
  assert.equal(requestError(req),null);

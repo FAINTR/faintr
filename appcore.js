@@ -442,7 +442,7 @@ function createCore(env) {
       }
       if (p === '/api/info') {
         const gl = env.info.web ? null : await fstate(DEFAULT_F);
-        return { live: env.live(), app: env.info.app, version: env.info.version, source: env.info.source, web: !!env.info.web,
+        return { live: env.live(), pendingFormats:env.info.pendingFormats||[], app: env.info.app, version: env.info.version, source: env.info.source, web: !!env.info.web,
           pvpoke: gl && gl.D ? gl.D.info.pvpoke : env.info.installed, dataBuilt: env.info.dataBuilt || null,
           grades: Object.fromEntries(Object.entries(M.GRADES).map(([k, g]) => [k, { label: g.label, desc: g.desc, pvpoke: !!g.pvpoke }])),
           weights: M.DEFAULT_WEIGHTS, tiers: M.TIERS, formats: formatsView() };

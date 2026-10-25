@@ -38,6 +38,14 @@ const flag = (name) => argv.includes('--' + name);
 const OUT = path.resolve(opt('out', path.join(ROOT, 'site')));
 const CACHE = path.resolve(opt('cache', path.join(ROOT, '.webcache')));
 const SEED = path.resolve(opt('seed', path.join(ROOT, 'assets/data')));
+const rotation = rq('tools/rotation-schedule.cjs');
+let schedule = loadSchedule(fs.existsSync(path.join(CACHE,'schedule.json')) ? path.join(CACHE,'schedule.json') : path.join(ROOT,'schedule.json'));
+async function refreshOfficialSchedule(gm) {
+  const known=(gm.formats||[]).map(f=>({...f,key:`${f.cup}-${f.cp}`}));
+  schedule=await rotation.refreshSchedule(schedule,known);
+  fs.mkdirSync(CACHE,{recursive:true});writeJ(path.join(CACHE,'schedule.json'),schedule);
+  if(schedule.sync.status!=='verified')log('::warning::'+schedule.sync.message);
+}
 const ONLY = (opt('formats', '') || '').split(',').map((s) => s.trim()).filter(Boolean);
 const FORCE = flag('force'), ONLY_BUILT = flag('only-built'), FETCH = flag('fetch');
 // All website tools are free; a stale repository variable must not re-enable billing.
@@ -86,7 +94,15 @@ async function pvpokeSource() {
   const license = verifyPvpokeLicense(await get(`https://raw.githubusercontent.com/pvpoke/pvpoke/${remote.sha}/LICENSE`));
   const src = path.join(CACHE, 'src');
   const stamp = readJ(path.join(src, '.version.json'), {});
-  if (stamp.sha === remote.sha && !FORCE) { fs.writeFileSync(path.join(src, 'LICENSE-pvpoke.txt'), license); log(`PvPoke ${remote.version} already downloaded`); return { src, version: remote.version }; }
+  if (stamp.sha === remote.sha && !FORCE) {
+    fs.writeFileSync(path.join(src, 'LICENSE-pvpoke.txt'), license);
+    const gm=readJ(path.join(src,'data/gamemaster.json'));await refreshOfficialSchedule(gm);
+    const scheduled=listFormats(gm,undefined,rotation.preparationKeys(schedule));
+    for(const file of dataFilesFor(scheduled))if(!fs.existsSync(path.join(src,file))) {
+      try{const bytes=await get(`https://raw.githubusercontent.com/pvpoke/pvpoke/${remote.sha}/src/${file}`);fs.mkdirSync(path.dirname(path.join(src,file)),{recursive:true});fs.writeFileSync(path.join(src,file),bytes);}catch(e){if(!/rankings|groups/.test(file))throw e;}
+    }
+    log(`PvPoke ${remote.version} already downloaded`); return { src, version: remote.version };
+  }
   log(`Downloading PvPoke ${remote.version}`);
   const tmp = src + '.new';
   fs.rmSync(tmp, { recursive: true, force: true });
@@ -94,7 +110,8 @@ async function pvpokeSource() {
   await fetchTo('data/gamemaster.json');
   fs.writeFileSync(path.join(tmp, 'LICENSE-pvpoke.txt'), license);
   const gm = readJ(path.join(tmp, 'data/gamemaster.json'));
-  const files = [...ENGINE_FILES, ...dataFilesFor(listFormats(gm)).filter((f) => f !== 'data/gamemaster.json')];
+  await refreshOfficialSchedule(gm);
+  const files = [...ENGINE_FILES, ...dataFilesFor(listFormats(gm,undefined,rotation.preparationKeys(schedule))).filter((f) => f !== 'data/gamemaster.json')];
   let k = 0;
   const queue = files.slice();
   await Promise.all(Array.from({ length: 8 }, async () => {
@@ -122,13 +139,12 @@ const hasData = (dir) => readJ(path.join(dir, 'teams.json'), {}).schema === SCHE
 async function buildFormats(src, version, formats) {
   const dataRoot = path.join(CACHE, 'data');
   const results = [];
-  const live = periodAt(loadSchedule(path.join(ROOT, 'schedule.json')), formats);
-  const activeKeys = new Set(live.now ? live.now.formats.map(f => f.key) : ['all-1500', 'all-2500', 'all-10000']);
+  const activeKeys = new Set(rotation.preparationKeys(schedule));
   for (const F of formats) {
     const dir = path.join(dataRoot, F.key), hash = inputHash(src, F);
     const prev = readJ(path.join(dir, 'inputs.json'), {});
-    // Nightly refreshes focus on the live rotation. An explicit --formats request
-    // can still prepare a different cup later, without rebuilding future cups now.
+    // Prepare the current rotation and only its immediate successor, so ready
+    // upcoming cups work from the menu before the official changeover.
     const policy=rq('tools/build-policy.cjs');
     const wanted = policy.wantedFormat(F.key,[...activeKeys],ONLY,FETCH);
     let state = 'reused';
@@ -294,7 +310,7 @@ async function assemble(src, version, built, formats) {
   fs.copyFileSync(path.join(ROOT, 'CHANGELOG.md'), path.join(tmp, 'changelog.md'));
   const v = (rel) => sha(fs.readFileSync(path.join(tmp, rel))).slice(0, 10);
   let html = fs.readFileSync(path.join(ROOT, 'ui/index.html'), 'utf8');
-  html = rq('tools/initial-controls.cjs').initialControls(html,loadSchedule(path.join(ROOT,'schedule.json')),fmtList);
+  html = rq('tools/initial-controls.cjs').initialControls(html,schedule,fmtList);
   html = html.replace('<!--WEB-HEAD-->', `
 <link rel="canonical" href="https://faintr.com/"><meta property="og:type" content="website"><meta property="og:title" content="FAINTR: Win the matchup"><meta property="og:description" content="Free Pokémon GO PvP team tools, built on PvPoke's battle simulator."><meta property="og:image" content="https://faintr.com/static/faintr-preview.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://faintr.com/static/faintr-preview.png"><meta name="theme-color" content="#2B2F3A">`)
     .replace('<!--SHARE-SCRIPT-->', '<script src="/static/share-codec.js"></script>')
@@ -302,8 +318,7 @@ async function assemble(src, version, built, formats) {
     .replace(/(href|src)="\/(static\/[^"?]+\.(?:css|js|svg)|metrics\.js)"/g, (m, attr, rel) => `${attr}="/${rel}?v=${v(rel)}"`);
   fs.writeFileSync(path.join(tmp, 'index.html'), html);
   // Manifest: the only file that changes name-in-place; never cached
-  const schedule = loadSchedule(path.join(ROOT, 'schedule.json'));
-  const manifest = { appVersion: PKG.version, pvpoke: version, built: new Date().toISOString(), premium: PREMIUM, schedule, formats: fmtList, files, sizes };
+  const manifest = { appVersion: PKG.version, pvpoke: version, built: new Date().toISOString(), premium: PREMIUM, schedule, pendingFormats:rotation.pendingFormats(schedule,fmtList), formats: fmtList, files, sizes };
   fs.writeFileSync(path.join(tmp, 'manifest.json'), JSON.stringify(manifest));
   fs.writeFileSync(path.join(tmp, '_headers'), [
     '/d/*', '  Cache-Control: public, max-age=31536000, immutable', '  Access-Control-Allow-Origin: *', '',
@@ -346,7 +361,7 @@ async function assemble(src, version, built, formats) {
   const t0 = Date.now();
   const { src, version } = await pvpokeSource();
   const gm = readJ(path.join(src, 'data/gamemaster.json'));
-  const formats = listFormats(gm, src);
+  const formats = listFormats(gm, src, rotation.preparationKeys(schedule));
   log(`PvPoke ${version}: ${formats.length} formats`);
   const built = await buildFormats(src, version, formats);
   const counts = built.reduce((a, r) => { a[r.state] = (a[r.state] || 0) + 1; return a; }, {});

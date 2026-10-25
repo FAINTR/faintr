@@ -158,7 +158,10 @@ function renderFormatBar() {
   $('#leagueSeg').innerHTML = live.map((f) => `<button type="button" data-f="${f.key}" aria-pressed="${S.f === f.key}" title="${esc((fl.find((x) => x.key === f.key) || {}).title || f.label)}">${esc(f.label)}</button>`).join('');
   const rest = fl.filter((f) => !liveKeys.has(f.key));
   const groups = [['Leagues', rest.filter((f) => f.kind === 'league')], ...['Little', 'Great', 'Ultra', 'Master'].map((g) => [g === 'Little' ? 'Little Cup (500 CP)' : `${g} League cups`, rest.filter((c) => c.kind === 'cup' && c.league === g)])].filter(([, c]) => c.length);
-  $('#cupSel').innerHTML = `<option value="">More leagues and cups (${rest.length})</option>` + groups.map(([g, c]) => `<optgroup label="${g}">${c.map((x) => `<option value="${x.key}" ${x.key === S.f ? 'selected' : ''}>${esc(x.title)}${x.built ? '' : ' (not set up)'}</option>`).join('')}</optgroup>`).join('');
+  const pending=(S.info.pendingFormats||[]).filter(f=>!fl.some(x=>x.key===f.key));
+  $('#cupSel').innerHTML = `<option value="">More leagues and cups (${rest.length+pending.length})</option>` + groups.map(([g, c]) => `<optgroup label="${g}">${c.map((x) => `<option value="${x.key}" ${x.key === S.f ? 'selected' : ''}>${esc(x.title)}${x.built ? '' : ' (not set up)'}</option>`).join('')}</optgroup>`).join('')+(pending.length?`<optgroup label="Upcoming / awaiting PvPoke data">${pending.map(f=>`<option value="${esc(f.key)}" disabled>${esc(f.title)} — awaiting PvPoke data</option>`).join('')}</optgroup>`:'');
+  $('#rotationStatus').hidden=!pending.length;
+  $('#rotationStatus').textContent=pending.length?`${pending.map(f=>f.title).join(', ')}: awaiting PvPoke’s cup rules and rankings. Listed in the menu now; checked automatically for availability.`:'';
   $('#cupSel').classList.toggle('on', !liveKeys.has(S.f));
   $('#cupSel').disabled=false;
   const L = S.info.live;
