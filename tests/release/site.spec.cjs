@@ -53,7 +53,9 @@ test('upcoming Halloween Cup is listed honestly until upstream data is available
  await expect(page.locator('#rotationStatus')).toBeVisible();await fits(page);
 });
 test('all eligible Pokémon can be picked beyond top ranks, while Fantasy eligibility remains enforced',async({page},info)=>{
- await loaded(page);await page.locator('#cupSel').selectOption('all-1500');await expect(page.locator('#matched')).toContainText('Great League');
+ const period=require('../../formats').periodAt(manifest.schedule,manifest.formats).now;
+ await page.addInitScript(period=>{localStorage.setItem('faintr.format','all-1500');localStorage.setItem('faintr.period',period);},period?String(period.start):'none');
+ await loaded(page);await expect(page.locator('#matched')).toContainText('Great League');
  if(await page.locator('#filterToggle').isVisible())await page.locator('#filterToggle').click();
  const choose=async(root,name)=>{await root.locator('input[role="combobox"]').fill(name);const option=root.getByRole('option',{name:new RegExp('^'+name)}).first();await expect(option).toBeVisible();if(info.project.use.hasTouch)await option.tap();else await option.click();};
  await choose(page.locator('#pk-include'),'Abra');await expect(page.locator('#matched')).toContainText('outside the ranked-team pool');
@@ -62,6 +64,9 @@ test('all eligible Pokémon can be picked beyond top ranks, while Fantasy eligib
  const third=page.locator('#slots .slot').nth(2);await third.locator('input[role="combobox"]').fill('184');await expect(third.getByRole('option',{name:/^Azumarill/})).toBeVisible();
  if(info.project.use.hasTouch)await third.getByRole('option',{name:/^Azumarill/}).tap();else await third.getByRole('option',{name:/^Azumarill/}).click();
  await page.locator('#gradeBtn').click();await expect(page.locator('#gradeResult article')).toBeVisible({timeout:60000});
+ await page.locator('nav.tabs [data-view="battle"]').click();await page.locator('#battleMode [data-m="counters"]').click();
+ await choose(page.locator('#pk-opp'),'Abra');await page.locator('#cfBtn').click();await expect(page.locator('#cfResult table')).toBeVisible({timeout:60000});
+ await expect(page.locator('#cfResult')).toContainText('Abra');await page.getByRole('tab',{name:'Team Grader',exact:true}).click();
  if(info.project.use.hasTouch)await page.locator('#leagueSeg [data-f="fantasy-1500"]').tap();else await page.locator('#leagueSeg [data-f="fantasy-1500"]').click();
  await expect(page.locator('#slots .picker input').first()).toHaveAttribute('placeholder','Search Fantasy Cup Pokémon');
  const first=page.locator('#slots .slot').nth(0);await first.locator('input[role="combobox"]').fill('Ursaluna');

@@ -229,7 +229,8 @@ function createCore(env) {
   // Counter finder: the best answers to up to three opponents, from the top 150 or from the Roster
   async function counters(st, opponents, source) {
     const tIndex = threatIndex(st);
-    const opp = opponents.filter((id) => tIndex.has(id)).slice(0, 3);
+    const opp = opponents.filter((id) => st.catalogById.has(id)).slice(0, 3);
+    const needsDirect = opp.some(id=>!tIndex.has(id));
     if (!opp.length) throw err(`Pick at least one opponent that's eligible for ${st.F.title}.`, 400);
     let cands = [];
     if (source === 'roster') {
@@ -238,13 +239,17 @@ function createCore(env) {
       // Only battle the chosen opponents: a few dozen sims per Pokemon instead of the whole league
       cands = await Promise.all(roster.map(async (e) => {
         const m = resolveMember(st, { id: e.id, moveset: e.moveset, ivs: e.ivs, levelCap: e.levelCap });
-        const c = st.catalogById.get(m.id), mv = new Map([...c.fast, ...c.charged]);
+        const c = st.catalogById.get(m.id), mv = new Map([...c.fast, ...c.charged, ...(c.extra||[])]);
         const direct = await env.pool.run('memberVs', m.id, m.moveset, st.F, m.ivs, m.levelCap, opp);
         return { direct, stat: { id: m.id, name: c.name, types: c.types, moves: m.moveset.map((x) => mv.get(x) || x) }, label: e.nickname || c.name, uid: e.uid, ivs: e.ivs, shiny: !!e.shiny };
       }));
-    } else if (!st.matrix) {
-      const top = st.overallRaw.slice(0, 40).filter((r) => st.catalogById.has(r.speciesId));
-      cands = await Promise.all(top.map(async (r) => { const x = await getMember(st, resolveMember(st, { id: r.speciesId })); return { ...x, label: x.stat.name }; }));
+    } else if (!st.matrix || needsDirect) {
+      const choices=st.matrix?st.matrix.statics:st.overallRaw.slice(0,40).filter(r=>st.catalogById.has(r.speciesId)).map(r=>({id:r.speciesId,moveset:r.moveset}));
+      cands=await Promise.all(choices.map(async candidate=>{
+        const m=resolveMember(st,{id:candidate.id,moveset:candidate.moveset}),c=st.catalogById.get(m.id),moves=new Map([...c.fast,...c.charged,...(c.extra||[])]);
+        const direct=await env.pool.run('memberVs',m.id,m.moveset,st.F,m.ivs,m.levelCap,opp);
+        return {direct,stat:{id:m.id,name:c.name,types:c.types,moves:m.moveset.map(id=>moves.get(id)||id)},label:c.name};
+      }));
     } else cands = st.matrix.rows.map((row, i) => ({ row, stat: st.matrix.statics[i], label: st.matrix.statics[i].name }));
     const oi = opp.map((id) => tIndex.get(id));
     const res = cands.filter((c) => !opp.includes(c.stat.id)).map((c) => {

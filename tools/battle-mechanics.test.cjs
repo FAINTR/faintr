@@ -7,6 +7,20 @@ function run(code,args={}){Object.assign(ctx,args);return vm.runInContext(code,c
 const mon=(id,moveset)=>({id,moveset,ivs:{atk:15,def:15,hp:15},levelCap:50});
 const metal=mon('melmetal',['THUNDER_SHOCK','SUPER_POWER','ROCK_SLIDE']);
 const regi=mon('registeel',['LOCK_ON','FOCUS_BLAST','ZAP_CANNON']);
+test('Counter Finder accepts legal low-stat opponents outside its cached threat matrix',async()=>{
+ const {createCore}=require('../appcore'),format={key:'all-1500',cup:'all',cp:1500,meta:'great',title:'Great League'};
+ const choices=run(`pokemonCatalog(${JSON.stringify(format)}).filter(p=>['azumarill','registeel'].includes(p.id)).map(p=>({id:p.id,moveset:p.rec}))`);
+ const matrix={statics:choices,cands:choices,rows:[],threats:[{id:'azumarill'}],meta:{metaOpp:[],metaTypes:[]}};
+ // Exercise the direct path with no saved matrix, and a tiny explicit cached
+ // matrix whose target list omits Abra; all battle calls use the real engine.
+ for(const cached of [false,true]){
+  const core=createCore({formats:[format],ev:code=>vm.runInContext(code,ctx),storage:{rosterAll:async()=>[]},isBuilt:()=>false,buildStatus:()=>null,info:{web:true},
+   loadFormatData:async()=>null,pool:{run:async(fn,...args)=>{ctx.__counterArgs=args;return vm.runInContext(fn+'.apply(null,__counterArgs)',ctx);}}});
+  const state=await core.fstate(format.key);if(cached)state.matrix=matrix;
+  const result=await core.handle('POST','/api/counters',{}, {f:format.key,opponents:['abra'],source:'pool'});
+  assert.equal(result.opponents[0].id,'abra');assert(result.results.length);for(const row of result.results)for(const ratings of row.vs)for(const rating of ratings)assert(Number.isFinite(rating));
+ }
+});
 test('manual catalogs include every native eligible low-stat species while preserving cup bans and threat pools',()=>{
  for(const format of [{cup:'all',cp:1500,meta:'great'},{cup:'all',cp:2500,meta:'ultra'},{cup:'all',cp:10000,meta:'master'},{cup:'fantasy',cp:1500,meta:'fantasy'}]){
   const result=run(`var before=JSON.stringify(threatList(fmt)),b=newBattle(fmt),cup=gm.getCupById(fmt.cup);
