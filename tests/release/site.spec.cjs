@@ -312,7 +312,12 @@ test('roster partial imports retain failures and export, deletion and undo prese
  await page.locator('#qClose').click();
  const download=page.waitForEvent('download');await page.locator('#rExport').click();const file=await download;
  const exported=JSON.parse(require('node:fs').readFileSync(await file.path(),'utf8'));expect(exported.roster).toHaveLength(1);expect(exported.roster[0].leagues).toEqual([1500]);
- await page.locator('#rGrid [data-act="del"]').click();await page.locator('#rGrid [data-act="yesdel"]').click();
+ await page.locator('#rGrid [data-act="del"]').click();
+ // Background account/IV refreshes rebuild cards; explicit confirmation survives.
+ await page.evaluate(()=>renderRoster());await expect(page.locator('#rGrid [data-act="yesdel"]')).toBeVisible();
+ await page.locator('#rGrid [data-act="keep"]').click();await expect(page.locator('#rGrid [data-act="yesdel"]')).toHaveCount(0);
+ await expect(page.locator('#rGrid [data-uid]')).toHaveCount(1);
+ await page.locator('#rGrid [data-act="del"]').click();await page.evaluate(()=>renderRoster());await page.locator('#rGrid [data-act="yesdel"]').click();
  await expect(page.locator('#rGrid [data-uid]')).toHaveCount(0);await page.getByRole('button',{name:'Undo',exact:true}).click();
  await expect(page.locator('#rGrid [data-uid]')).toHaveCount(1);await page.reload();await expect(page.locator('#teams .team').first()).toBeVisible();
  await page.getByRole('tab',{name:'Roster',exact:true}).click();await expect(page.locator('#rGrid')).toContainText('Import fixture');

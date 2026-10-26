@@ -933,7 +933,11 @@ async function runCounters() {
 }
 
 /* ======================= ROSTER ======================= */
-const R = { league: null, view: store.get('faintr.rview') || 'cards', page:0, query:null };
+const R = { league: null, view: store.get('faintr.rview') || 'cards', page:0, query:null,deleteUid:null,removingUid:null };
+function rosterDeletePrompt(entry){
+  const busy=R.removingUid===entry.uid?' disabled':'';
+  return `<span class="confirm">Remove ${esc(entry.nickname||entry.name)} from your Roster? <button class="btn small" type="button" data-act="yesdel"${busy}>Yes, remove</button><button class="btn small quiet" type="button" data-act="keep"${busy}>Keep it</button></span>`;
+}
 const ROSTER_PAGE_SIZE=50;
 async function loadRoster() {
   S.roster = await api('/api/roster', undefined, { noF: true });
@@ -995,6 +999,7 @@ function rosterList() {
 }
 function renderRoster() {
   const el = $('#rGrid'); if (!el || !S.info) return;
+  if(R.deleteUid&&!S.roster.some(e=>e.uid===R.deleteUid))R.deleteUid=null;
   const { lg, counts, list } = rosterList();
   const query=JSON.stringify([lg,$('#rSearch').value,$('#rSort').value,$('#rFilter').value,R.view]);
   if(R.query!==query){R.page=0;R.query=query;}
@@ -1048,6 +1053,7 @@ function renderRoster() {
       <div class="ract"><button class="btn small" type="button" data-act="grade" title="Put it in the Team Grader">Grade</button><button class="btn small" type="button" data-act="battle" title="1v1 in Matchups">Battle</button><button class="btn small" type="button" data-act="counters" title="Best answers to it">Counters</button><button class="btn small" type="button" data-act="ivs" title="Open in PvP IVs">IVs</button>
         <span class="spacer"></span><button class="btn small quiet" type="button" data-act="edit">Edit</button><button class="btn small quiet" type="button" data-act="del">Delete</button></div></article>`;
   }).join('');
+  if(R.deleteUid){const entry=S.roster.find(e=>e.uid===R.deleteUid),card=[...el.querySelectorAll('[data-uid]')].find(c=>c.dataset.uid===R.deleteUid);if(entry&&card?.querySelector('.ract'))card.querySelector('.ract').innerHTML=rosterDeletePrompt(entry);}
 }
 $('#rSearch').addEventListener('input', renderRoster);
 for(const pager of [$('#rPager'),$('#rPagerBottom')])pager.addEventListener('click',e=>{
@@ -1088,16 +1094,17 @@ $('#rGrid').addEventListener('click', async (ev) => {
   if (act === 'edit') openRosterForm(e);
   if (act === 'pin') { try{await saveRosterPatch(e, { pinned: !e.pinned });}catch(error){showToast(`Could not save: ${error.message}`);} }
   if (act === 'del') {
-    b.closest('.ract').innerHTML = `<span class="confirm">Remove ${esc(e.nickname || e.name)} from your Roster? <button class="btn small" type="button" data-act="yesdel">Yes, remove</button><button class="btn small quiet" type="button" data-act="keep">Keep it</button></span>`;
+    if(R.removingUid)return;
+    R.deleteUid=e.uid;b.closest('.ract').innerHTML=rosterDeletePrompt(e);
   }
-  if (act === 'keep') renderRoster();
+  if (act === 'keep') {if(R.removingUid)return;R.deleteUid=null;renderRoster();}
   if (act === 'yesdel') {
-    b.disabled=true;
+    if(R.removingUid)return;R.removingUid=e.uid;renderRoster();
     try{
-      await api('/api/roster/delete', { uid: e.uid }, { noF: true });S.roster=S.roster.filter(x=>x.uid!==e.uid);renderRoster();
+      await api('/api/roster/delete', { uid: e.uid }, { noF: true });R.removingUid=null;R.deleteUid=null;S.roster=S.roster.filter(x=>x.uid!==e.uid);renderRoster();
       await loadRoster().catch(error=>showToast(`Removed, but the list could not refresh: ${error.message}`));
       showToast(`Removed ${e.nickname || e.name}.`, { label: 'Undo', run: async () => { try{await api('/api/roster/undo', {}, { noF: true });await loadRoster();}catch(error){showToast(`Could not undo: ${error.message}`);} } });
-    }catch(error){b.disabled=false;showToast(`Could not remove this Pokémon: ${error.message}`);}
+    }catch(error){R.removingUid=null;renderRoster();showToast(`Could not remove this Pokémon: ${error.message}`);}
   }
 });
 $('#rGrid').addEventListener('change',async ev=>{
@@ -1824,7 +1831,7 @@ if (WEB) {
     if(reason==='auth-changing'){
       const next=st.user?.id||null;
       if(renderedAccount&&renderedAccount!==next){
-        S.roster=[];$('#rGrid').replaceChildren();$('#savedList').replaceChildren();
+        R.deleteUid=null;R.removingUid=null;S.roster=[];$('#rGrid').replaceChildren();$('#savedList').replaceChildren();
         VIPUI.seq++;VIPUI.battles=[];VIPUI.teams=[];VIPUI.alerts=[];
         ['#battleLogStats','#battleLogEntries','#vipAlertList','#bugList'].forEach(sel=>$(sel)?.replaceChildren());
         $('#vipUpgradeResults').textContent='Find your next build for the selected cup.';
