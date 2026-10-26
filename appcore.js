@@ -451,7 +451,7 @@ function createCore(env) {
         const st = await fstate(q.f);
         return { key: st.F.key, title: st.F.title, cp: st.F.cp, built: !!st.D, nTeams: st.D ? st.D.n : null, pvpoke: st.D ? st.D.info.pvpoke : null,
           pool: st.D ? st.matrix.statics.map((s) => ({ id: s.id, name: s.name, types: s.types })) : [], cuts: st.D ? tierCuts(st.D) : null, bulkGoal: st.D ? st.D.C.bulkGoal : null,
-          catalog: st.catalog.map((c) => ({ id: c.id, name: c.name, types: c.types, rank: c.rank, fast: c.fast, charged: c.charged, extra:c.extra, rec: c.rec })),
+          catalog: st.catalog.map((c) => ({ id: c.id, name: c.name, dex:c.dex, types: c.types, rank: c.rank, fast: c.fast, charged: c.charged, extra:c.extra, rec: c.rec })),
           anti: st.D && st.D.anti ? { field: st.D.anti.field.length, verified: st.D.anti.verified.size, fieldTeams: fieldNames(st) } : null,
           build: env.buildStatus(st.F.key) || null };
       }

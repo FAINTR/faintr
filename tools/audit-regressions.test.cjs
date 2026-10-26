@@ -2,6 +2,12 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const {Pool}=require('../web/src/engine-pool'),patches=require('../ui/storage-patches'),{createCore}=require('../appcore');
 const policy=require('./build-policy.cjs');
 const {requestError}=require('../http-safety');
+test('Great League ranks 250 candidates and byte indices preserve the final candidate without wrapping',()=>{
+ const {rankedPoolSize}=require('../format-pools'),codec=require('../teamcodec');
+ assert.equal(rankedPoolSize('all-1500'),250);for(const key of ['all-2500','all-10000','fantasy-1500','mega-1500'])assert.equal(rankedPoolSize(key),150);
+ const members=codec.enumerate(Array.from({length:250},(_,i)=>({base:'dex'+i,mega:false})));
+ assert.equal(members.length,250*249*248/6*3);assert.deepEqual([...members.subarray(-3)],[247,248,249]);
+});
 const rotation=require('./rotation-schedule.cjs');
 const officialUrl='https://pokemongo.com/news/go-battle-league-twilight-trails';
 const scheduleFixture=(season='Twilight Trails',rows=[['October 20 - October 27','2026-10-20',['Ultra League*','Fantasy Cup: Great League Edition*']],['October 27 - November 3','2026-10-27',['Master League*','Mega Halloween Cup: Great League Edition*']],['November 3 - November 10','2026-11-03',['Great League: Mega Edition*','Ultra League: Mega Edition*','Master League: Mega Edition*']]])=>`<title>GO Battle League: ${season} Update — Pokémon GO</title><p>The following leagues will begin and end at 1:00 p.m. PDT (GMT −7) on the dates listed below.</p>`+rows.map(([dates,day,labels])=>`<div data-slot="GblScheduleBlockItem" data-start-date="${day}T00:34:00Z"><span data-slot="GblScheduleBlockDates">${dates}</span>${labels.map(l=>'<div>'+l+'</div>').join('')}</div>`).join('');
@@ -77,6 +83,9 @@ test('upstream simulation-only updates invalidate cached rankings, without inval
  const files=new Map(inputs.inputFiles(F).map(file=>[path.join(root,file),Buffer.from('fixture:'+file)]));
  const read=file=>{if(!files.has(file))throw Error('Missing synthetic input');return files.get(file);};
  const baseline=inputs.inputHash(root,F,'code-v1',read);
+ const pools=require('../format-pools'),originalPool=pools.rankedPoolSize;
+ const ultra={...F,key:'all-2500',cp:2500,meta:'ultra'},ultraBefore=inputs.inputHash(root,ultra,'code-v1',read);
+ try{pools.rankedPoolSize=key=>key==='all-1500'?249:originalPool(key);assert.notEqual(inputs.inputHash(root,F,'code-v1',read),baseline);assert.equal(inputs.inputHash(root,ultra,'code-v1',read),ultraBefore);}finally{pools.rankedPoolSize=originalPool;}
  for(const file of ENGINE_FILES){
   const key=path.join(root,file),previous=files.get(key);files.set(key,Buffer.from('changed:'+file));
   assert.notEqual(inputs.inputHash(root,F,'code-v1',read),baseline,file+' must invalidate the cache');files.set(key,previous);

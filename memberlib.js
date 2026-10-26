@@ -130,9 +130,14 @@ function pokemonCatalog(F){
   var overall = loadRankings(F.cup,'overall',F.cp);
   var rank = {}; overall.forEach(function(r, i){ rank[r.speciesId] = i + 1; });
   var battle = newBattle(F);
-  return threatList(F).filter(function(t){ return t.id.indexOf('_xs') === -1; }).map(function(t){
-    var p = makePokemon(t.id, battle);
-    return { id: t.id, name: t.name, rank: rank[t.id] || 9999, dex: p.dex, mega:p.hasTag('mega'),
+  // The ranked opponent pool deliberately drops low-stat builds. Manual choices
+  // must keep every released, cup-legal species regardless of competitiveness.
+  // false disables only that stat-product cutoff, preserving native cup bans.
+  var cup = gm.getCupById(F.cup);
+  return gm.generateFilteredPokemonList(battle, cup.include, cup.exclude, undefined, undefined, false)
+    .filter(function(p){ return p.speciesId.indexOf('_xs') === -1; }).map(function(eligible){
+    var p = makePokemon(eligible.speciesId, battle);
+    return { id: p.speciesId, name: p.speciesName, rank: rank[p.speciesId] || 9999, dex: p.dex, mega:p.hasTag('mega'),
       types: p.types.filter(function(x){ return x !== 'none'; }),
       fast: p.fastMovePool.map(function(m){ return [m.moveId, m.name]; }),
       charged: p.chargedMovePool.map(function(m){ return [m.moveId, m.name]; }),

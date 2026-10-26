@@ -18,8 +18,12 @@ const server=http.createServer((req,res)=>{
   const manifest=JSON.parse(fs.readFileSync(path.join(root,'manifest.json'))),names=Object.fromEntries(Object.entries(manifest.files).map(([name,file])=>['/'+file,name]));
   const results=[];
   try {
-    for(const profile of (process.argv[4]?[process.argv[4]]:['desktop','slower-phone'])) {
+    for(const profile of (process.argv[4]&&process.argv[4]!=='both'?[process.argv[4]]:['desktop','slower-phone'])) {
       const context=await browser.newContext({viewport:profile==='desktop'?{width:1440,height:1000}:{width:375,height:812}});
+      if(process.argv[5]){
+        const period=require('../formats').periodAt(manifest.schedule,manifest.formats).now;
+        await context.addInitScript(({key,period})=>{localStorage.setItem('faintr.format',key);localStorage.setItem('faintr.period',period);},{key:process.argv[5],period:period?String(period.start):'none'});
+      }
       await context.route('**/*',r=>new URL(r.request().url()).origin==='http://127.0.0.1:4181'?r.continue():r.abort());
       await context.route('**/config.js*',r=>r.fulfill({contentType:'text/javascript',body:'window.FAINTR_CONFIG={};'}));
       const page=await context.newPage(),cdp=await context.newCDPSession(page);
@@ -42,10 +46,11 @@ const server=http.createServer((req,res)=>{
       servedBytes=0;servedPaths=[];const start=Date.now();await page.goto('http://127.0.0.1:4181/');
       await page.locator('#teams .team').first().waitFor({timeout:240000});
       const teamReadyMs=Date.now()-start,readyBytes=servedBytes;
+      if(process.argv[5]&&!((await page.locator('#findLede').innerText()).includes(manifest.formats.find(f=>f.key===process.argv[5]).title)))throw Error('Requested benchmark league did not load');
       const tabStart=Date.now();await page.getByRole('tab',{name:'Team Grader',exact:true}).click();
       await page.locator('#slots').waitFor();const tabMs=Date.now()-tabStart;
       const metrics=await page.evaluate(()=>({...window.__lab,resources:performance.getEntriesByType('resource').map(e=>({path:new URL(e.name).pathname,bytes:e.transferSize,duration:e.duration})),domReady:performance.getEntriesByType('navigation')[0].domContentLoadedEventEnd}));
-      results.push({profile,teamReadyMs,readyBytes,tabMs,lcpMs:metrics.lcp,cls:metrics.cls,shifts:metrics.shifts,largestObservedInteractionMs:Math.max(0,...metrics.events),dataFiles:[...new Set(servedPaths.map(p=>names[p]).filter(Boolean))],resources:metrics.resources.map(r=>({...r,path:names[r.path]||r.path}))});
+      results.push({profile,format:process.argv[5]||'default',teamReadyMs,readyBytes,tabMs,lcpMs:metrics.lcp,cls:metrics.cls,shifts:metrics.shifts,largestObservedInteractionMs:Math.max(0,...metrics.events),dataFiles:[...new Set(servedPaths.map(p=>names[p]).filter(Boolean))],resources:metrics.resources.map(r=>({...r,path:names[r.path]||r.path}))});
       console.log(JSON.stringify({...results.at(-1),resources:undefined,dataFiles:results.at(-1).dataFiles.filter(f=>/formats.*teams.bin/.test(f))}));
       await context.close();
     }

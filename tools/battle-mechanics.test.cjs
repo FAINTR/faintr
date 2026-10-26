@@ -7,6 +7,19 @@ function run(code,args={}){Object.assign(ctx,args);return vm.runInContext(code,c
 const mon=(id,moveset)=>({id,moveset,ivs:{atk:15,def:15,hp:15},levelCap:50});
 const metal=mon('melmetal',['THUNDER_SHOCK','SUPER_POWER','ROCK_SLIDE']);
 const regi=mon('registeel',['LOCK_ON','FOCUS_BLAST','ZAP_CANNON']);
+test('manual catalogs include every native eligible low-stat species while preserving cup bans and threat pools',()=>{
+ for(const format of [{cup:'all',cp:1500,meta:'great'},{cup:'all',cp:2500,meta:'ultra'},{cup:'all',cp:10000,meta:'master'},{cup:'fantasy',cp:1500,meta:'fantasy'}]){
+  const result=run(`var before=JSON.stringify(threatList(fmt)),b=newBattle(fmt),cup=gm.getCupById(fmt.cup);
+   var expected=gm.generateFilteredPokemonList(b,cup.include,cup.exclude,undefined,undefined,false).filter(p=>p.speciesId.indexOf('_xs')===-1).map(p=>p.speciesId).sort();
+   var catalog=pokemonCatalog(fmt);({expected,ids:catalog.map(p=>p.id).sort(),before,after:JSON.stringify(threatList(fmt)),catalog})`,{fmt:format});
+  assert.deepEqual(result.ids,result.expected);assert.equal(result.before,result.after);assert.equal(new Set(result.ids).size,result.ids.length);
+  for(const p of result.catalog){assert(p.fast.length>0,p.id);assert(p.charged.length>0,p.id);assert(p.rec.length>=2,p.id);assert(Number.isInteger(p.dex));}
+  if(format.cup==='all'&&format.cp===1500){assert(result.ids.includes('ursaluna'));assert(result.ids.includes('ursaluna_shadow'));assert(result.ids.includes('abra'));assert(!JSON.parse(result.before).some(p=>p.id==='abra'));
+   const ranked=run(`var eligible=new Set(threatList(fmt).map(t=>t.id));loadRankings(fmt.cup,'overall',fmt.cp).filter(r=>!r.speciesId.includes('_xs')&&eligible.has(r.speciesId)).slice(0,250).map(r=>r.speciesId)`,{fmt:format});assert(ranked.includes('ursaluna'));
+  }
+  if(format.cup==='fantasy'){assert(!result.ids.includes('ursaluna'));assert(result.ids.includes('azurill'));for(const p of result.catalog)assert(p.types.some(t=>['dragon','steel','fairy'].includes(t)));}
+ }
+});
 const fixtures=[
  [mon('garchomp',['DRAGON_TAIL','EARTH_POWER','TWISTER']),mon('metagross',['BULLET_PUNCH','METEOR_MASH','EARTHQUAKE'])],
  [metal,regi],

@@ -27,6 +27,7 @@
       "updater.js",
       "report.js",
       "formats.js",
+      "format-pools.js",
       "antimeta_worker.js",
       "threevthree.js",
       "engine_glue.js",

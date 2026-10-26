@@ -52,6 +52,22 @@ test('upcoming Halloween Cup is listed honestly until upstream data is available
  for(const cup of pending){const option=page.locator(`#cupSel option[value="${cup.key}"]`);await expect(option).toHaveCount(1);await expect(option).toBeDisabled();await expect(option).toContainText('awaiting PvPoke data');}
  await expect(page.locator('#rotationStatus')).toBeVisible();await fits(page);
 });
+test('all eligible Pokémon can be picked beyond top ranks, while Fantasy eligibility remains enforced',async({page},info)=>{
+ await loaded(page);await page.locator('#cupSel').selectOption('all-1500');await expect(page.locator('#matched')).toContainText('Great League');
+ if(await page.locator('#filterToggle').isVisible())await page.locator('#filterToggle').click();
+ const choose=async(root,name)=>{await root.locator('input[role="combobox"]').fill(name);const option=root.getByRole('option',{name:new RegExp('^'+name)}).first();await expect(option).toBeVisible();if(info.project.use.hasTouch)await option.tap();else await option.click();};
+ await choose(page.locator('#pk-include'),'Abra');await expect(page.locator('#matched')).toContainText('outside the ranked-team pool');
+ await page.locator('#gradeIncluded').click();await expect(page.locator('#slots .picked').nth(0)).toContainText('Abra');
+ const second=page.locator('#slots .slot').nth(1);await choose(second,'Ursaluna');await expect(second.locator('.picked')).toContainText('Ursaluna');
+ const third=page.locator('#slots .slot').nth(2);await third.locator('input[role="combobox"]').fill('184');await expect(third.getByRole('option',{name:/^Azumarill/})).toBeVisible();
+ if(info.project.use.hasTouch)await third.getByRole('option',{name:/^Azumarill/}).tap();else await third.getByRole('option',{name:/^Azumarill/}).click();
+ await page.locator('#gradeBtn').click();await expect(page.locator('#gradeResult article')).toBeVisible({timeout:60000});
+ if(info.project.use.hasTouch)await page.locator('#leagueSeg [data-f="fantasy-1500"]').tap();else await page.locator('#leagueSeg [data-f="fantasy-1500"]').click();
+ await expect(page.locator('#slots .picker input').first()).toHaveAttribute('placeholder','Search Fantasy Cup Pokémon');
+ const first=page.locator('#slots .slot').nth(0);await first.locator('input[role="combobox"]').fill('Ursaluna');
+ await expect(first.locator('.nomatch')).toContainText('only Dragon, Steel or Fairy');await expect(first.getByRole('option',{name:/^Ursaluna/})).toHaveCount(0);
+ await choose(first,'Azurill');await expect(first.locator('.picked')).toContainText('Azurill');await fits(page);
+});
 test('each built league loads nonzero scores; Anti-Meta remains free', async ({page}) => {
   page.on('pageerror',e=>console.log('League error:',e.message));
   await loaded(page);

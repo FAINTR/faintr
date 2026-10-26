@@ -72,7 +72,8 @@ function quantiles(col, n = 1000) {
 
 async function buildAll(srcDir, outDir, opts = {}) {
   const F = opts.fmt || { key: 'all-1500', cup: 'all', cp: 1500, meta: 'great', title: 'Great League' };
-  const poolSize = opts.poolSize || 150;
+  const poolSize = opts.poolSize || require('./format-pools').rankedPoolSize(F.key||`${F.cup}-${F.cp}`);
+  if(!Number.isInteger(poolSize)||poolSize<3||poolSize>256)throw Error('Ranked pool size must be a whole number from 3 to 256.');
   const nWorkers = opts.workers || Math.max(1, Math.min(8, os.cpus().length - (opts.leaveOneCore ? 1 : 0)));
   const log = opts.onProgress || (() => {});
   fs.mkdirSync(outDir, { recursive: true });

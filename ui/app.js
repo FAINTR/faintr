@@ -44,6 +44,7 @@ async function api(path, body, opts = {}) {
   if (!r.ok || (j && j.error)) { const e = new Error(j.error || 'Request failed'); e.needsBuild = !!j.needsBuild; throw e; }
   return j;
 }
+const rankedPoolCount = () => S.fmt?.pool?.length || (S.f === 'all-1500' ? 250 : 150);
 const catalogById = () => (S._cat || (S._cat = new Map(S.fmt.catalog.map((c) => [c.id, c]))));
 const rosterFits = e => !!S.fmt && window.FAINTR_ROSTER_LEAGUES.usable(e,S.fmt.cp);
 const rosterIds = () => new Set(S.roster.filter(rosterFits).map((e) => e.id));
@@ -85,7 +86,7 @@ function picker(el, onPick, sourceFn) {
     const q = input.value.trim().toLowerCase();
     items = q ? sourceFn().filter((p) => p.name.toLowerCase().includes(q) || p.id.includes(q.replace(/\s+/g, '_')) || String(p.dex) === q).slice(0, 40) : [];
     box.innerHTML = items.map((p, i) => `<button type="button" role="option" tabindex="-1" id="${box.id}-${i}" aria-selected="${i===hl}" data-i="${i}" class="${i === hl ? 'hl' : ''}">${esc(p.name)}${typeDots(p.types)}${p.rank && p.rank < 9999 ? `<span class="rk">#${p.rank}</span>` : ''}</button>`).join('')
-      || (q.length > 1 && sourceFn !== fullSource && el.dataset.scope !== 'all' ? `<div class="nomatch">No ${esc(title())} Pokémon match "${esc(input.value.trim())}". Is it eligible here? Switch league or cup at the top.</div>` : '');
+      || (q.length > 1 && sourceFn !== fullSource && el.dataset.scope !== 'all' ? `<div class="nomatch">No eligible ${esc(title())} Pokémon match "${esc(input.value.trim())}".${S.fmt?.key==='fantasy-1500'?' Fantasy Cup allows only Dragon, Steel or Fairy types.':''} Try the Pokémon’s name or Pokédex number, or choose another league or cup.</div>` : '');
     box.hidden = !box.innerHTML;
     input.setAttribute('aria-expanded',String(!box.hidden));
     if(hl>=0&&items[hl]){input.setAttribute('aria-activedescendant',`${box.id}-${hl}`);box.querySelector('.hl')?.scrollIntoView({block:'nearest'});}else input.removeAttribute('aria-activedescendant');
@@ -180,7 +181,7 @@ function syncLedes() {
   $('#findTitle').textContent = anti ? 'Anti-Meta Teams' : 'FAINTR Teams';
   $('#findLede').textContent = anti
     ? `Teams built to beat the ${t} meta: every team ranked by the share of 3v3 games it wins against the ${S.fmt.anti.field} strongest varied teams, with each one leading three ways. The top ${S.fmt.anti.verified} are re-played on PvPoke's engine.`
-    : `Every ${t} team from PvPoke's top 150, graded and ranked. Tell us what matters and what you own, and we'll sort the rest.`;
+    : `Every ${t} team from PvPoke's top ${rankedPoolCount()}, graded and ranked. Tell us what matters and what you own, and we'll sort the rest.`;
 }
 $('#antiBtn').addEventListener('click', () => {
   if (needPremium()) return;
@@ -198,8 +199,8 @@ async function setFormat(key, quiet) {
   renderFormatBar();
   const t = title();
   $('#gradeLede').textContent = `Pick three Pokémon, their moves and your IVs, or load them from your Roster. We battle each one against every ${t} Pokémon at 0, 1 and 2 shields, then show you what the team does well, what beats it, and how to play it.`;
-  const pool = new Set(S.fmt.pool.map((p) => p.id));
-  S.include = S.include.filter((p) => pool.has(p.id)); S.exclude = S.exclude.filter((p) => pool.has(p.id));
+  const eligible = new Set(S.fmt.catalog.map((p) => p.id));
+  S.include = S.include.filter((p) => eligible.has(p.id)); S.exclude = S.exclude.filter((p) => eligible.has(p.id));
   renderChips('include'); renderChips('exclude');
   CF.opp = CF.opp.filter((p) => catalogById().has(p.id)); renderChips('opp'); $('#cfResult').innerHTML = '';
   if (!quiet) {
@@ -232,7 +233,7 @@ function buildPanel(b) {
       <progress value="${b.i || 0}" max="${b.n || 1}"></progress></div>`;
   }
   return `<div class="empty buildbox"><h3>${t} isn't set up yet</h3>
-    <p>FAINTR grades every team from this cup's top 150 on your computer, the same way it does for the leagues. It takes a minute or two, once. After that it updates along with the rest of your data.</p>
+    <p>FAINTR grades every team from this cup's top ${rankedPoolCount()} on your computer, the same way it does for the leagues. It takes a minute or two, once. After that it updates along with the rest of your data.</p>
     ${b && b.stage === 'error' ? `<p class="note">${esc(b.message)}</p>` : ''}
     <p class="note">Matchups, Meta and your Roster already work for ${t}.</p>
     <button class="btn primary" type="button" data-build>Set up ${t}</button></div>`;
@@ -253,7 +254,7 @@ function ownedNote() {
   if (!S.fmt.built) { $('#ownedNote').textContent = ''; return; }
   const pool = new Set(S.fmt.pool.map((p) => p.id));
   const n = [...rosterIds()].filter((id) => pool.has(id)).length;
-  $('#ownedNote').textContent = `${n} of your ${S.roster.length} Pokémon ${n === 1 ? 'is' : 'are'} in ${title()}'s top 150.`;
+  $('#ownedNote').textContent = `${n} of your ${S.roster.length} Pokémon ${n === 1 ? 'is' : 'are'} in ${title()}'s top ${rankedPoolCount()}.`;
 }
 $('#ownedOnly').addEventListener('change', (e) => { S.ownedOnly = e.target.checked; store.set('faintr.ownedOnly', S.ownedOnly ? '1' : ''); S.limit = 50; runQuery(); });
 document.addEventListener('click', (e) => { const a = e.target.closest('[data-goto]'); if (a) { e.preventDefault(); showView(a.dataset.goto); } });
@@ -272,6 +273,13 @@ async function runQuery() {
   const owned = ownedList();
   const anti = S.anti && S.fmt.anti;
   $('#tierLegend').hidden = !!anti;
+  const poolIds=new Set(S.fmt.pool.map(p=>p.id)),outside=S.include.filter(p=>!poolIds.has(p.id));
+  if(outside.length){
+    S.visibleTeams=[];$('#matched').textContent='Eligible Pokémon outside the ranked-team pool';$('#moreBtn').hidden=true;
+    $('#teams').innerHTML=`<div class="empty"><p>${outside.map(p=>esc(p.name)).join(', ')} ${outside.length===1?'is':'are'} eligible for ${esc(title())}, but outside its top-${rankedPoolCount()} ranked-team pool. The ranked list cannot contain ${outside.length===1?'it':'them'}. Build your own team with any eligible Pokémon in Team Grader.</p><button type="button" class="btn" id="gradeIncluded">Build in Team Grader</button></div>`;
+    $('#gradeIncluded').addEventListener('click',()=>{$('#clearBtn').click();loadIntoGrader(S.include.slice(0,3).map(p=>({id:p.id})));showView('grade');});
+    return;
+  }
   const body = { include: S.include.map((p) => p.id), exclude: S.exclude.map((p) => p.id), owned, minGrades: S.mins, weights: S.weights, limit: S.limit, mode: anti ? 'anti' : undefined,
     maxShadow: S.maxShadow === '' ? undefined : parseInt(S.maxShadow, 10) };
   try {
@@ -285,7 +293,7 @@ async function runQuery() {
 function renderTeams(teams, owned) {
   const el = $('#teams');
   if (!teams.length) {
-    el.innerHTML = `<div class="empty">${owned ? `No team of three from your Roster clears every filter in ${esc(title())}. You need at least three different Pokémon from its top 150; lower a minimum grade or add more to your Roster.` : 'No team clears every filter. Lower a minimum grade or drop a must-include.'}</div>`;
+    el.innerHTML = `<div class="empty">${owned ? `No team of three from your Roster clears every filter in ${esc(title())}. You need at least three different Pokémon from its top ${rankedPoolCount()}; lower a minimum grade or add more to your Roster.` : 'No team clears every filter. Lower a minimum grade or drop a must-include.'}</div>`;
     return;
   }
   S.visibleTeams = teams;
@@ -345,7 +353,7 @@ $('#teams').addEventListener('click', async (e) => {
       const r = await api('/api/swap', { memberIdx: q._d.memberIdx, weights: S.weights });
       const good = r.swaps.filter((s) => s.delta > 0.05);
       $('.swaps', q).innerHTML = good.length ? `<ul class="tight">${good.map((s) => `<li>Swap ${esc(s.out)} for <b>${esc(s.in)}</b>: overall +${s.delta.toFixed(1)}</li>`).join('')}</ul>`
-        : '<p class="note">No single swap from the top 150 raises the overall score. This team is a local best.</p>';
+        : `<p class="note">No single swap from the top ${rankedPoolCount()} raises the overall score. This team is a local best.</p>`;
     } finally { b.disabled = false; }
   }
 });
@@ -580,7 +588,7 @@ $('#fillBtn').addEventListener('click', async () => {
   if (!S.fmt.built) { $('#gradeStatus').innerHTML = needsBuildMsg(); return; }
   const poolIds = new Set(S.fmt.pool.map((p) => p.id));
   const outside = picked.filter((m) => !poolIds.has(m.id));
-  if (outside.length) { $('#gradeStatus').textContent = `Find the rest works from ${title()}'s top 150, and ${catalogById().get(outside[0].id).name} isn't in it. Pick the other slots yourself.`; return; }
+  if (outside.length) { $('#gradeStatus').textContent = `Find the rest works from ${title()}'s top ${rankedPoolCount()}, and ${catalogById().get(outside[0].id).name} isn't in it. Pick the other slots yourself.`; return; }
   $('#gradeStatus').innerHTML = '<span class="spin"></span> Finding the best teammates';
   try {
     const owned = ownedList();
@@ -704,11 +712,11 @@ function renderReport(d) {
     }).join('')}</div>`;
   // Improve
   const good = d.swaps.filter((s) => s.delta > 0.05);
-  v('improve').innerHTML = `<p class="hint">The best single replacements from the top 150, keeping the other two in their slots. Overall score now: ${d.composite.toFixed(1)}. A ✓ means it's in your Roster.</p>
+  v('improve').innerHTML = `<p class="hint">The best single replacements from the top ${rankedPoolCount()}, keeping the other two in their slots. Overall score now: ${d.composite.toFixed(1)}. A ✓ means it's in your Roster.</p>
     ${good.length ? `<table class="t"><thead><tr><th>Swap out</th><th>Bring in</th><th class="n">Overall</th><th>New grades</th><th></th></tr></thead><tbody>
       ${good.map((s, i) => `<tr><td>${esc(s.out)}</td><td><b>${esc(s.in)}</b>${rosterIds().has(s.inId) ? '<span class="own" title="In your Roster">✓</span>' : ''}<div class="note">${esc(s.inMoves.join(', '))}</div></td><td class="n">+${s.delta.toFixed(1)}</td><td>${card(s.grades)}</td>
         <td><button class="btn small trySwap" type="button" data-i="${i}">Try it</button></td></tr>`).join('')}</tbody></table>`
-      : '<p class="note">No single swap from the top 150 raises the overall score. This team is a local best.</p>'}`;
+      : `<p class="note">No single swap from the top ${rankedPoolCount()} raises the overall score. This team is a local best.</p>`}`;
   v('improve').addEventListener('click', (e) => {
     const b = e.target.closest('.trySwap'); if (!b) return;
     const s = good[+b.dataset.i];
@@ -897,7 +905,7 @@ const CF = { opp: [], source: 'pool' };
 $('#cfSource').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-s]'); if (!b) return;
   CF.source = b.dataset.s; $$('#cfSource button').forEach((x) => x.setAttribute('aria-pressed', x === b));
-  $('#cfHint').textContent = CF.source === 'roster' ? 'Uses your real IVs and moves. Ranked by wins at 1 shield, then average battle rating.' : `Answers from ${title()}'s top 150. Ranked by wins at 1 shield, then average battle rating.`;
+  $('#cfHint').textContent = CF.source === 'roster' ? 'Uses your real IVs and moves. Ranked by wins at 1 shield, then average battle rating.' : `Answers from ${title()}'s top ${rankedPoolCount()}. Ranked by wins at 1 shield, then average battle rating.`;
 });
 $('#cfBtn').addEventListener('click', runCounters);
 async function runCounters() {
@@ -1937,8 +1945,8 @@ async function loadInfo() {
   const rs = store.get('faintr.rsort'); if (rs) $('#rSort').value = rs;
   renderFormatBar();
   buildFilters(); buildSlots(); buildBattle();
-  picker($('#pk-include'), (p) => { if (!S.include.some((x) => x.id === p.id)) S.include.push(p); renderChips('include'); scheduleQuery(); }, () => S.fmt.pool);
-  picker($('#pk-exclude'), (p) => { if (!S.exclude.some((x) => x.id === p.id)) S.exclude.push(p); renderChips('exclude'); scheduleQuery(); }, () => S.fmt.pool);
+  picker($('#pk-include'), (p) => { if (!S.include.some((x) => x.id === p.id)) S.include.push(p); renderChips('include'); scheduleQuery(); }, () => S.fmt.catalog);
+  picker($('#pk-exclude'), (p) => { if (!S.exclude.some((x) => x.id === p.id)) S.exclude.push(p); renderChips('exclude'); scheduleQuery(); }, () => S.fmt.catalog);
   picker($('#pk-opp'), (p) => { if (!CF.opp.some((x) => x.id === p.id) && CF.opp.length < 3) CF.opp.push(p); renderChips('opp'); }, () => S.fmt.catalog);
   picker($('#pk-roster'), (p) => rfSetSpecies(p), fullSource);
   picker($('#pk-iv'), (p) => setIvSpecies(p), fullSource);

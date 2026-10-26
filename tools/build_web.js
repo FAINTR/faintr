@@ -162,7 +162,7 @@ async function buildFormats(src, version, formats) {
         const t0 = Date.now(), tmp = dir + '.new';
         fs.rmSync(tmp, { recursive: true, force: true });
         let last = '';
-        await buildAll(src, tmp, { fmt: F, poolSize: 150, version, onProgress: (stage, i, n) => { const s = `${stage} ${Math.floor((i / Math.max(1, n)) * 4) * 25}%`; if (s !== last) { last = s; log(`  ${F.key}: ${s}`); } } });
+        await buildAll(src, tmp, { fmt: F, poolSize: rq('format-pools').rankedPoolSize(F.key), version, onProgress: (stage, i, n) => { const s = `${stage} ${Math.floor((i / Math.max(1, n)) * 4) * 25}%`; if (s !== last) { last = s; log(`  ${F.key}: ${s}`); } } });
         // What moved since the last build of this format
         try {
           const rel = rankingFile(F.filesCup || F.cup, 'overall', F.cp);
