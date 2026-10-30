@@ -16,6 +16,15 @@ async function loaded(page) {
   await expect(page.locator('#teams .team').first()).toBeVisible();
   await expect(page.locator('#loader')).toBeHidden();
 }
+async function selectFormat(page, key) {
+  // Rotation moves formats between the live buttons and the menu.
+  // Exercise the visible control rather than assuming a particular week's placement.
+  const button = page.locator(`#leagueSeg button[data-f="${key}"]`);
+  if (await button.isVisible()) await button.click();
+  else await page.locator('#cupSel').selectOption(key);
+  const format = manifest.formats.find(f => f.key === key);
+  await expect(page.locator('#gradeLede')).toContainText(`every ${format.title} Pokémon`);
+}
 test.beforeEach(async ({page},info) => {
   // Tests are isolated: prohibit account writes, OAuth, analytics and all other external requests.
   // Locally created blob workers share this origin (Safari's gzip fallback).
@@ -67,18 +76,36 @@ test('all eligible Pokémon can be picked beyond top ranks, while Fantasy eligib
  await page.locator('nav.tabs [data-view="battle"]').click();await page.locator('#battleMode [data-m="counters"]').click();
  await choose(page.locator('#pk-opp'),'Abra');await page.locator('#cfBtn').click();await expect(page.locator('#cfResult table')).toBeVisible({timeout:60000});
  await expect(page.locator('#cfResult')).toContainText('Abra');await page.getByRole('tab',{name:'Team Grader',exact:true}).click();
- if(info.project.use.hasTouch)await page.locator('#leagueSeg [data-f="fantasy-1500"]').tap();else await page.locator('#leagueSeg [data-f="fantasy-1500"]').click();
+ await selectFormat(page,'fantasy-1500');
  await expect(page.locator('#slots .picker input').first()).toHaveAttribute('placeholder','Search Fantasy Cup Pokémon');
  const first=page.locator('#slots .slot').nth(0);await first.locator('input[role="combobox"]').fill('Ursaluna');
  await expect(first.locator('.nomatch')).toContainText('only Dragon, Steel or Fairy');await expect(first.getByRole('option',{name:/^Ursaluna/})).toHaveCount(0);
  await choose(first,'Azurill');await expect(first.locator('.picked')).toContainText('Azurill');await fits(page);
 });
+test('league controls work before and after live formats move into the menu',async({page})=>{
+ let liveKeys=['all-1500','all-2500','fantasy-1500'];
+ await page.route('**/manifest.json',route=>{
+   const now=Date.now();
+   const schedule={season:'Isolated rotation regression',periods:[{start:new Date(now-86400000).toISOString(),end:new Date(now+86400000).toISOString(),formats:liveKeys.map(key=>[key,manifest.formats.find(f=>f.key===key).title])}]};
+   return route.fulfill({contentType:'application/json',body:JSON.stringify({...manifest,schedule})});
+ });
+ for(const keys of [liveKeys,['all-10000']]){
+   liveKeys=keys;
+   await loaded(page);
+   for(const key of ['all-1500','all-2500','fantasy-1500']){
+     await expect(page.locator(`#leagueSeg button[data-f="${key}"]`)).toHaveCount(keys.includes(key)?1:0);
+     await expect(page.locator(`#cupSel option[value="${key}"]`)).toHaveCount(keys.includes(key)?0:1);
+     await selectFormat(page,key);
+   }
+   await fits(page);
+ }
+});
+
 test('each built league loads nonzero scores; Anti-Meta remains free', async ({page}) => {
   page.on('pageerror',e=>console.log('League error:',e.message));
   await loaded(page);
   for(const format of manifest.formats.filter(f=>f.built)) {
-    const button=page.locator(`#leagueSeg button[data-f="${format.key}"]`);
-    if(await button.count()) await button.click(); else await page.locator('#cupSel').selectOption(format.key);
+    await selectFormat(page,format.key);
     await expect(page.locator('#matched')).toContainText(format.title);
     await expect.poll(async()=>Number(await page.locator('#teams .team .score b').first().innerText())).toBeGreaterThan(0);
     await fits(page);
@@ -185,7 +212,7 @@ test('populated grading breakdowns fit at every report tab',async({page},info)=>
 
 test('populated battle, timeline and detailed tables fit on phones',async({page},info)=>{
   await loaded(page);
-  await page.locator('#cupSel').selectOption('all-1500');
+  await selectFormat(page,'all-1500');
   await expect(page.locator('#matched')).toContainText('Great League');
   await page.getByRole('tablist',{name:'Sections'}).getByRole('tab',{name:'Matchups',exact:true}).click();
   for(const [i,name] of ['Azumarill','Clodsire'].entries()) {
@@ -201,7 +228,7 @@ test('populated battle, timeline and detailed tables fit on phones',async({page}
 });
 
 test('battle results and IV comparisons use the exact winner when ratings round to 500',async({page},info)=>{
-  await loaded(page);await page.locator('#cupSel').selectOption('all-1500');await expect(page.locator('#matched')).toContainText('Great League');
+  await loaded(page);await selectFormat(page,'all-1500');await expect(page.locator('#matched')).toContainText('Great League');
   await page.getByRole('tablist',{name:'Sections'}).getByRole('tab',{name:'Matchups',exact:true}).click();
   for(const [i,name] of ['Azumarill','Clodsire'].entries()){
     const editor=page.locator('#bsides .ed').nth(i);await editor.locator('.picker input').fill(name);if(info.project.use.hasTouch)await editor.locator('.suggest button').first().tap();else await editor.locator('.suggest button').first().click();
@@ -450,13 +477,13 @@ test('roster CP and league choices govern every team picker',async({page})=>{
     {uid:'both',id:'azumarill',name:'Azumarill',cp:1498,leagues:[1500,2500],ivs:{atk:0,def:15,hp:15},moveset:[]}
   ])));
   await loaded(page);
-  await page.locator('#cupSel').selectOption('all-1500');
+  await selectFormat(page,'all-1500');
   await expect(page.locator('#matched')).toContainText('Great League');
   await page.getByRole('tab',{name:'Team Grader',exact:true}).click();
   const roster=page.locator('#slots .fromRoster').first();
   await expect(roster.locator('option[value="master-only"]')).toHaveCount(0);
   await expect(roster.locator('option[value="great-only"]')).toHaveCount(1);
-  await page.locator('#leagueSeg button[data-f="all-2500"]').click();
+  await selectFormat(page,'all-2500');
   await expect(page.locator('#gradeLede')).toContainText('Ultra League');
   await expect(roster.locator('option[value="great-only"]')).toHaveCount(0);
   await expect(roster.locator('option[value="both"]')).toHaveCount(1);
