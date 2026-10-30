@@ -2,6 +2,12 @@
 
 Scope: the owner's GitHub failure emails for **FAINTR site update**. Discord was explicitly excluded. No customer data, credentials, database settings or account records were inspected or changed.
 
+|Severity|Confirmed finding|Impact|Verification and correction|
+|---|---|---|---|
+|High, operational|Two browser tests assumed fixed league-button placement|Blocks fresh site/ranking publication after a cup turnover|Failure trace names the missing buttons; dropdown choices are present. Select the actual visible control; regression covers both layouts.|
+|Medium|The complete browser gate outgrew its 15-minute limit|Even 150 passing cases could not publish|Run log reports 150 passed in 15.1 minutes followed by the step timeout. Allow 25 minutes and retain every assertion.|
+|Low|Optional npm-cache restore was refused|About ten minutes of setup delay in the observed attempt|Raw log reports the cache egress refusal. Remove that optional cache; retain locked installs and the working built-data cache.|
+
 ## Confirmed cause and impact
 
 The scheduled update ran, downloaded/built its data, verified hosting access and passed the 97 Node regression cases and sharing checks. Publication was then blocked by browser tests that assumed fixed locations for league controls. The website deliberately shows current leagues as buttons and moves other formats into its dropdown at a rotation. The tests incorrectly expected Fantasy Cup and Ultra League to remain buttons after October 27.
@@ -33,3 +39,9 @@ First corrected run 41096545731 passed all **150 browser cases in 15.1 minutes**
 The same run's optional npm-cache restore reported `Failed to restore: Egress is over the account limit.` The Node setup step spent about 10 minutes before continuing. The separate built-data cache restored successfully. Removing only `cache: npm` avoids the refused dependency-cache request; normal `npm ci` still installs locked dependencies, and the expensive built-data cache stays intact. This is a GitHub cache allowance issue, separate from the owner's AI usage. No paid plan, account quota or security setting was changed.
 
 GitHub's job-status API also intermittently returned HTTP 502 or empty step lists, and continued showing the completed job as in progress. The job log itself supplies the test and timeout evidence; status-only green or in-progress labels are not used as publication proof. Sanitized review used the raw job log preserved in sibling `output/site-recovery-41096545731-partial.log`.
+
+## Saved handoff: publication pending
+
+Test correction: commit `f5751426bfa07fca5dca9a9404646f24b6516ca3`. Measured timeout/cache correction: `57b3a6fc8a1a14133154e407c2bc31fe81778e33`. The normal corrected [release 41100780885](https://github.com/FAINTR/faintr/actions/runs/41100780885), job `124217505133`, remains queued at the final read-only check. The earlier run's completed log proves the 150-case pass and the timeout; attempting to cancel it was rejected as already completed, despite its status API still reporting in progress. This inconsistent status and the queued release are observed facts; a wider GitHub outage or account-specific quota cause has not been established.
+
+The live site still returns its October 27 build. **Successful publication has not yet been verified.** No automated publication guard was bypassed and no duplicate release was dispatched. Do not retry the older 15-minute revision. Next step: check release 41100780885 and its actual job log, then verify a newer live manifest, source equality and focused read-only browser checks if publication succeeds. Preserve the earlier live evidence by writing any new production check to a new October 30 output file. No new chat automation was created; completed older audits should not be rerun.
