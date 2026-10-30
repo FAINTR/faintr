@@ -20,8 +20,16 @@ Release tests now select a format using its visible live button or its dropdown 
 
 A new isolated browser regression supplies two synthetic schedules: GL/UL/Fantasy as live buttons, then Master alone as live. It asserts the expected button/menu placement and selects GL, UL and Fantasy in both layouts. Real app rendering and format loading are used; no public schedule or production data is changed.
 
-No browser assertions were removed, retries added or test time limits raised. Application behavior, Pokémon calculations, user data, free access and analytics settings are unchanged.
+No browser assertions were removed or retries added. Application behavior, Pokémon calculations, user data, free access and analytics settings are unchanged.
 
 ## Verification
 
 All 15 targeted browser checks passed in 3.3 minutes across desktop, 320px, 375px, 430px and Safari/iPhone emulation. These cover both formerly failing flows and the new two-layout rotation regression. All six operations-alert tests also passed, including the skipped-run recovery guard. Local browser checks use bundled older PvPoke data and synthetic local rosters, with account/external traffic blocked. The normal publication gate must still validate the newest fetched data before any recovery is claimed.
+
+## Additional verified workflow limits
+
+First corrected run 41096545731 passed all **150 browser cases in 15.1 minutes**, then the step's 15-minute timeout prevented publication. The log explicitly reports both outcomes. The larger complete gate therefore needs measured time headroom: its limit is now 25 minutes, with all assertions and publication requirements retained. This adjustment follows an observed complete pass; it does not hide test failures.
+
+The same run's optional npm-cache restore reported `Failed to restore: Egress is over the account limit.` The Node setup step spent about 10 minutes before continuing. The separate built-data cache restored successfully. Removing only `cache: npm` avoids the refused dependency-cache request; normal `npm ci` still installs locked dependencies, and the expensive built-data cache stays intact. This is a GitHub cache allowance issue, separate from the owner's AI usage. No paid plan, account quota or security setting was changed.
+
+GitHub's job-status API also intermittently returned HTTP 502 or empty step lists, and continued showing the completed job as in progress. The job log itself supplies the test and timeout evidence; status-only green or in-progress labels are not used as publication proof. Sanitized review used the raw job log preserved in sibling `output/site-recovery-41096545731-partial.log`.

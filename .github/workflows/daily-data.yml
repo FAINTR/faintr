@@ -71,7 +71,6 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         with:
           node-version: 22
-          cache: npm
 
       - name: Install
         if: steps.gate.outputs.skip != 'true'
@@ -142,7 +141,9 @@ jobs:
 
       - name: Check desktop, mobile and Safari before publishing
         if: steps.gate.outputs.skip != 'true'
-        timeout-minutes: 15
+        # The 150-case gate passed in 15.1 minutes on a slower runner.
+        # Leave headroom while keeping the complete publication gate mandatory.
+        timeout-minutes: 25
         run: npx playwright test --workers=2
 
       - name: Save release-check report
