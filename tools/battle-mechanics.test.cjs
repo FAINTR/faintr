@@ -29,9 +29,30 @@ test('manual catalogs include every native eligible low-stat species while prese
   assert.deepEqual(result.ids,result.expected);assert.equal(result.before,result.after);assert.equal(new Set(result.ids).size,result.ids.length);
   for(const p of result.catalog){assert(p.fast.length>0,p.id);assert(p.charged.length>0,p.id);assert(p.rec.length>=2,p.id);assert(Number.isInteger(p.dex));}
   if(format.cup==='all'&&format.cp===1500){assert(result.ids.includes('ursaluna'));assert(result.ids.includes('ursaluna_shadow'));assert(result.ids.includes('abra'));assert(!JSON.parse(result.before).some(p=>p.id==='abra'));
-   const ranked=run(`var eligible=new Set(threatList(fmt).map(t=>t.id));loadRankings(fmt.cup,'overall',fmt.cp).filter(r=>!r.speciesId.includes('_xs')&&eligible.has(r.speciesId)).slice(0,250).map(r=>r.speciesId)`,{fmt:format});assert(ranked.includes('ursaluna'));
+   const ranked=run(`var eligible=new Set(threatList(fmt).map(t=>t.id));loadRankings(fmt.cup,'overall',fmt.cp).filter(r=>!r.speciesId.includes('_xs')&&eligible.has(r.speciesId)).slice(0,250).map(r=>r.speciesId)`,{fmt:format});
+   assert.equal(ranked.length,250);assert.equal(new Set(ranked).size,250);for(const id of ranked)assert(result.ids.includes(id),id);
   }
   if(format.cup==='fantasy'){assert(!result.ids.includes('ursaluna'));assert(result.ids.includes('azurill'));for(const p of result.catalog)assert(p.types.some(t=>['dragon','steel','fairy'].includes(t)));}
+ }
+});
+test('ranking turnover changes the top250 pool without hiding eligible manual choices',()=>{
+ const isolated=makeCtx(src);
+ const result=vm.runInContext(`(function(){
+  var fmt={cup:'all',cp:1500,meta:'great'},original=loadRankings('all','overall',1500);
+  var target=original.find(r=>r.speciesId==='ursaluna'),others=original.filter(r=>r.speciesId!=='ursaluna');
+  if(!target)throw Error('Ursaluna ranking fixture is unavailable');
+  var before=pokemonCatalog(fmt).map(p=>p.id).sort(),scenarios=[];
+  for(var rankedFirst of [true,false]){
+   gm.rankings.alloverall1500=rankedFirst?[target].concat(others):others.concat([target]);
+   var eligible=new Set(threatList(fmt).map(t=>t.id));
+   var ranked=loadRankings('all','overall',1500).filter(r=>!r.speciesId.includes('_xs')&&eligible.has(r.speciesId)).slice(0,250).map(r=>r.speciesId);
+   scenarios.push({rankedFirst,ranked,catalog:pokemonCatalog(fmt).map(p=>p.id).sort()});
+  }
+  return {before,scenarios};
+ })()`,isolated);
+ for(const scenario of result.scenarios){
+  assert.equal(scenario.ranked.length,250);assert.equal(scenario.ranked.includes('ursaluna'),scenario.rankedFirst);
+  assert.deepEqual(scenario.catalog,result.before);assert(scenario.catalog.includes('ursaluna'));
  }
 });
 const fixtures=[

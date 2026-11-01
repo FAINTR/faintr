@@ -40,8 +40,18 @@ The same run's optional npm-cache restore reported `Failed to restore: Egress is
 
 GitHub's job-status API also intermittently returned HTTP 502 or empty step lists, and continued showing the completed job as in progress. The job log itself supplies the test and timeout evidence; status-only green or in-progress labels are not used as publication proof. Sanitized review used the raw job log preserved in sibling `output/site-recovery-41096545731-partial.log`.
 
-## Saved handoff: publication pending
+## Saved handoff: publication pending as of October 30
 
 Test correction: commit `f5751426bfa07fca5dca9a9404646f24b6516ca3`. Measured timeout/cache correction: `57b3a6fc8a1a14133154e407c2bc31fe81778e33`. The normal corrected [release 41100780885](https://github.com/FAINTR/faintr/actions/runs/41100780885), job `124217505133`, remains queued at the final read-only check. The earlier run's completed log proves the 150-case pass and the timeout; attempting to cancel it was rejected as already completed, despite its status API still reporting in progress. This inconsistent status and the queued release are observed facts; a wider GitHub outage or account-specific quota cause has not been established.
 
 The live site still returns its October 27 build. **Successful publication has not yet been verified.** No automated publication guard was bypassed and no duplicate release was dispatched. Do not retry the older 15-minute revision. Next step: check release 41100780885 and its actual job log, then verify a newer live manifest, source equality and focused read-only browser checks if publication succeeds. Preserve the earlier live evidence by writing any new production check to a new October 30 output file. No new chat automation was created; completed older audits should not be rerun.
+
+## November 1 — new ranking-data assertion failure
+
+Follow-up confirmed release 41100780885 **succeeded and published October 30 at 17:58 UTC**. The previous menu-location/cache/timeout fixes are published; they are not the cause of the new 34-second failure email. Before this new correction, the public manifest returned the October 30 17:41 build, PvPoke `6477226_2026-10-29`.
+
+Runs 41172553151 and 41277175577 failed the same Node assertion, `assert(ranked.includes('ursaluna'))`, before reaching browser checks or publication. The test incorrectly required one particular Pokémon to stay in the top250 as live rankings change. In the exact failed source `c1d4bfb_2026-10-31`, the overall GL ranking lists Ursaluna at288 and Shadow Ursaluna at265. This is expected ranking movement, not evidence that legal manual selection stopped working. The later green DST/rotation-slot runs skipped publication and are not recovery evidence.
+
+Correction: retain assertions for250 distinct eligible ranked candidates, Ursaluna/Shadow manual eligibility and Fantasy's exclusion. Add a separate regression moving Ursaluna to both ends of an isolated ranking list: ranked membership changes correctly while the complete manual catalog remains identical. The read-only live checker likewise accepts either ranked-team filtering or the existing outside-pool Team Grader route, based on actual published candidates. Its output path can now be specified to preserve earlier captures. No app calculations, candidate policy, rosters, security settings or Discord changes.
+
+All25 battle/selection regressions pass with the bundled local source, and again with the exact downloaded `c1d4bfb` GL rank list substituted in memory. The second run isolates the triggering rank change using the older local simulator; the normal CI still validates the full fresh upstream source. The exact rank file is preserved in sibling `output/great-rankings-c1d4bfb.json`, and both failure logs in `output/site-failure-<runID>.log`. Publication of this newest correction remains pending its own normal release gate.
