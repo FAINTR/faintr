@@ -19,7 +19,7 @@ function formatFor(label,known=[]){
  const found=known.find(f=>f.cp===cp&&normalized(f.title||f.short||'')===normalized(label));
  if(found)return [found.key,title(label)];
  // Names identify pending menu entries only: never invent rules or rankings.
- const aliases={'Mega Halloween Cup':'halloween','Mega Color Cup':'megacolor','Mega Catch Cup':'catch','2026 GO LAIC Cup':'laic2026','Little Cup':'little'};
+ const aliases={'Mega Halloween Cup':'halloween','Mega Color Cup':'megacolor','Mega Catch Cup':'catch','2026 GO LAIC Cup':'laic2027gbl','Little Cup':'little'};
  const name=title(label),derived=name.toLowerCase().replace(/ cup$/,'').replace(/[^a-z0-9]+/g,'');
  let cup=aliases[name]||derived;
  if(known.some(f=>f.key===cup+'-'+cp&&normalized(f.title||'')!==normalized(label)))cup=derived;

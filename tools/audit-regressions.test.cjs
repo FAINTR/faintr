@@ -4,7 +4,7 @@ const policy=require('./build-policy.cjs');
 const {requestError}=require('../http-safety');
 test('Great League ranks 250 candidates and byte indices preserve the final candidate without wrapping',()=>{
  const {rankedPoolSize}=require('../format-pools'),codec=require('../teamcodec');
- assert.equal(rankedPoolSize('all-1500'),250);for(const key of ['all-2500','all-10000','fantasy-1500','mega-1500'])assert.equal(rankedPoolSize(key),150);
+ assert.equal(rankedPoolSize('all-1500'),250);assert.equal(rankedPoolSize('laic2027gbl-1500'),250);for(const key of ['all-2500','all-10000','fantasy-1500','mega-1500','laic2027-1500'])assert.equal(rankedPoolSize(key),150);
  const members=codec.enumerate(Array.from({length:250},(_,i)=>({base:'dex'+i,mega:false})));
  assert.equal(members.length,250*249*248/6*3);assert.deepEqual([...members.subarray(-3)],[247,248,249]);
 });

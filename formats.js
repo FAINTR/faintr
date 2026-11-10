@@ -29,7 +29,7 @@ function listFormats(gamemaster, srcDir, scheduledKeys = []) {
     if (srcDir && !fs.existsSync(path.join(srcDir, rankingFile(cupForFiles, 'overall', f.cp)))) continue;
     seen.add(key);
     out.push({ key, cup: f.cup, cp: f.cp, meta: f.meta || (f.cp === 2500 ? 'ultra' : f.cp === 10000 ? 'master' : 'great'),
-      title: f.title, short: (FEATURED[key] && FEATURED[key].short) || f.title, league: LEAGUE_NAME[f.cp] || `${f.cp} CP`, kind: 'cup',
+      title: key === 'laic2027gbl-1500' ? '2026 GO LAIC Cup' : f.title, short: (FEATURED[key] && FEATURED[key].short) || f.title, league: LEAGUE_NAME[f.cp] || `${f.cp} CP`, kind: 'cup',
       bundled: !!FEATURED[key], featured: !!FEATURED[key], filesCup: cupForFiles });
   }
   return out;
