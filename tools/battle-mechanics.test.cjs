@@ -23,7 +23,10 @@ test('Counter Finder accepts legal low-stat opponents outside its cached threat 
 });
 test('manual catalogs include every native eligible low-stat species while preserving cup bans and threat pools',()=>{
  for(const format of [{cup:'all',cp:1500,meta:'great'},{cup:'all',cp:2500,meta:'ultra'},{cup:'all',cp:10000,meta:'master'},{cup:'fantasy',cp:1500,meta:'fantasy'}]){
-  const result=run(`var before=JSON.stringify(threatList(fmt)),b=newBattle(fmt),cup=gm.getCupById(fmt.cup);
+  const evaluate=format.cup==='fantasy'&&!fs.existsSync(src+'/data/rankings/fantasy/overall/rankings-1500.json')
+   ? (code,args)=>vm.runInContext(code,Object.assign(makeCtx('assets/pvpoke-src'),args))
+   : run;
+  const result=evaluate(`var before=JSON.stringify(threatList(fmt)),b=newBattle(fmt),cup=gm.getCupById(fmt.cup);
    var expected=gm.generateFilteredPokemonList(b,cup.include,cup.exclude,undefined,undefined,false).filter(p=>p.speciesId.indexOf('_xs')===-1).map(p=>p.speciesId).sort();
    var catalog=pokemonCatalog(fmt);({expected,ids:catalog.map(p=>p.id).sort(),before,after:JSON.stringify(threatList(fmt)),catalog})`,{fmt:format});
   assert.deepEqual(result.ids,result.expected);assert.equal(result.before,result.after);assert.equal(new Set(result.ids).size,result.ids.length);

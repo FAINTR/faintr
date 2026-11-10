@@ -12,6 +12,9 @@ function pacificDate(year,month,day){
  return new Date(Date.UTC(year,month,day,13+hours)).toISOString();
 }
 function formatFor(label,known=[]){
+ // PvPoke names this in-game cup for the championship season. Its other
+ // LAIC format uses in-person rules and allows Mega Evolution.
+ if(title(label)==='2026 GO LAIC Cup')return ['laic2027gbl-1500','2026 GO LAIC Cup'];
  const cp=/Little/i.test(label)?500:/Ultra League/i.test(label)?2500:/Master League/i.test(label)?10000:1500;
  const standard=label.match(/^(Great|Ultra|Master) League(?:: Mega Edition)?$/i);
  if(standard)return [(label.includes('Mega')?'mega':'all')+'-'+cp,standard[1]+(label.includes('Mega')?' (Mega)':'')];
@@ -19,7 +22,7 @@ function formatFor(label,known=[]){
  const found=known.find(f=>f.cp===cp&&normalized(f.title||f.short||'')===normalized(label));
  if(found)return [found.key,title(label)];
  // Names identify pending menu entries only: never invent rules or rankings.
- const aliases={'Mega Halloween Cup':'halloween','Mega Color Cup':'megacolor','Mega Catch Cup':'catch','2026 GO LAIC Cup':'laic2027gbl','Little Cup':'little'};
+ const aliases={'Mega Halloween Cup':'halloween','Mega Color Cup':'megacolor','Mega Catch Cup':'catch','Little Cup':'little'};
  const name=title(label),derived=name.toLowerCase().replace(/ cup$/,'').replace(/[^a-z0-9]+/g,'');
  let cup=aliases[name]||derived;
  if(known.some(f=>f.key===cup+'-'+cp&&normalized(f.title||'')!==normalized(label)))cup=derived;

@@ -9,6 +9,15 @@ test('Great League ranks 250 candidates and byte indices preserve the final cand
  assert.equal(members.length,250*249*248/6*3);assert.deepEqual([...members.subarray(-3)],[247,248,249]);
 });
 const rotation=require('./rotation-schedule.cjs');
+test('official LAIC rotation selects the in-game rules and excludes the championship format',()=>{
+ const championship={key:'laic2027-1500',cp:1500,title:'LAIC 2027 Championship Series Cup'};
+ const gbl={key:'laic2027gbl-1500',cp:1500,title:'LAIC 2027 Cup (GBL)'};
+ const entry=rotation.formatFor('2026 GO LAIC Cup*',[championship,gbl]);
+ assert.deepEqual(entry,[gbl.key,'2026 GO LAIC Cup']);
+ const schedule={periods:[{start:'2026-11-10T21:00:00Z',end:'2026-11-17T21:00:00Z',formats:[entry]}]};
+ const when=Date.parse('2026-11-11T00:00:00Z');
+ assert.equal(require('../formats').periodAt(schedule,[championship,gbl],when).now.formats[0].key,gbl.key);
+});
 const officialUrl='https://pokemongo.com/news/go-battle-league-twilight-trails';
 const scheduleFixture=(season='Twilight Trails',rows=[['October 20 - October 27','2026-10-20',['Ultra League*','Fantasy Cup: Great League Edition*']],['October 27 - November 3','2026-10-27',['Master League*','Mega Halloween Cup: Great League Edition*']],['November 3 - November 10','2026-11-03',['Great League: Mega Edition*','Ultra League: Mega Edition*','Master League: Mega Edition*']]])=>`<title>GO Battle League: ${season} Update — Pokémon GO</title><p>The following leagues will begin and end at 1:00 p.m. PDT (GMT −7) on the dates listed below.</p>`+rows.map(([dates,day,labels])=>`<div data-slot="GblScheduleBlockItem" data-start-date="${day}T00:34:00Z"><span data-slot="GblScheduleBlockDates">${dates}</span>${labels.map(l=>'<div>'+l+'</div>').join('')}</div>`).join('');
 test('official GL/UL/ML dates use the published 1pm Pacific rule across DST, not stray source times',()=>{
