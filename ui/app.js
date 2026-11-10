@@ -154,7 +154,13 @@ function crestFor(e) { return crestSVG(e.id, e.types || [], e.shiny); }
 function renderFormatBar() {
   const fl = S.info.formats;
   // Front buttons: what's live in GO Battle League right now. Everything else is in the menu.
-  const live = S.info.live && S.info.live.now ? S.info.live.now.formats : LEAGUES.map((l) => ({ key: l.key, label: l.short }));
+  const live = S.info.live && S.info.live.now ? [...S.info.live.now.formats] : LEAGUES.map((l) => ({ key: l.key, label: l.short }));
+  const laicIndex = live.findIndex(f => f.key === 'laic2027gbl-1500');
+  if (laicIndex !== -1 && live.some(f => /^(all|mega)-2500$/.test(f.key))) {
+    const [laic] = live.splice(laicIndex, 1);
+    const ultraIndex = live.findIndex(f => /^(all|mega)-2500$/.test(f.key));
+    live.splice(ultraIndex + 1, 0, laic);
+  }
   const liveKeys = new Set(live.map((f) => f.key));
   $('#leagueSeg').innerHTML = live.map((f) => `<button type="button" data-f="${f.key}" aria-pressed="${S.f === f.key}" title="${esc((fl.find((x) => x.key === f.key) || {}).title || f.label)}">${esc(f.label)}</button>`).join('');
   const rest = fl.filter((f) => !liveKeys.has(f.key));
