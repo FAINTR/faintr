@@ -198,10 +198,30 @@ $('#antiBtn').addEventListener('click', () => {
 $('#leagueSeg').addEventListener('click', (e) => { const b = e.target.closest('button[data-f]'); if (b) setFormat(b.dataset.f); });
 $('#cupSel').addEventListener('change', (e) => { if (e.target.value) setFormat(e.target.value); });
 
+let formatSeq = 0, formatLoading = false;
 async function setFormat(key, quiet) {
-  if (key === S.f && S.fmt && !quiet) return;
+  if (key === S.f && S.fmt && !quiet && !formatLoading) return;
+  const seq = ++formatSeq;
+  formatLoading = true;
+  ++qSeq;
+  clearTimeout(qTimer);
+  S.visibleTeams = [];
+  $('#teams').innerHTML = '<div class="empty">Loading league teams…</div>';
+  $('#moreBtn').hidden = true;
   S.f = key; store.set('faintr.format', key);
-  S.fmt = await api('/api/format', undefined); S._cat = null;
+  let nextFormat;
+  try {
+    nextFormat = await api('/api/format?f=' + encodeURIComponent(key), undefined, { noF: true });
+  } catch (e) {
+    if (seq === formatSeq) {
+      formatLoading = false;
+      S.fmt = null;
+      $('#matched').textContent = e.message;
+    }
+    return;
+  }
+  if (seq !== formatSeq) return;
+  S.fmt = nextFormat; formatLoading = false; S._cat = null;
   renderFormatBar();
   const t = title();
   $('#gradeLede').textContent = `Pick three Pokémon, their moves and your IVs, or load them from your Roster. We battle each one against every ${t} Pokémon at 0, 1 and 2 shields, then show you what the team does well, what beats it, and how to play it.`;
@@ -267,7 +287,7 @@ document.addEventListener('click', (e) => { const a = e.target.closest('[data-go
 
 async function runQuery() {
   syncFilterCount();
-  if (!S.fmt) return;
+  if (!S.fmt || formatLoading) return;
   const seq = ++qSeq;
   if (!S.fmt.built) {
     $('#matched').textContent = ''; $('#moreBtn').hidden = true; $('#tierLegend').hidden = true;
@@ -294,7 +314,7 @@ async function runQuery() {
     $('#matched').textContent = r.matched ? (anti ? `${fmt(r.matched)} anti-meta teams${owned ? ' from your Roster' : ''}, best first` : owned ? `Best teams from your Roster: ${fmt(r.matched)}` : `${fmt(r.matched)} ${title()} teams match`) : 'No teams match';
     renderTeams(r.teams, owned);
     $('#moreBtn').hidden = !(r.matched > r.teams.length && S.limit < 500);
-  } catch (e) { $('#matched').textContent = e.message; if (e.needsBuild) { S.fmt.built = false; runQuery(); } }
+  } catch (e) { if (seq !== qSeq) return; $('#matched').textContent = e.message; if (e.needsBuild) { S.fmt.built = false; runQuery(); } }
 }
 function renderTeams(teams, owned) {
   const el = $('#teams');
